@@ -7,7 +7,7 @@
 #define US_PER_S 1000000
 #define GIGA     1000000000
 #define SIMD_INT_WIDTH 8
-#define BLOCK_WIDTH 32 // a 128x8 block of uint32s uses 32K of memory (64K of L1 cache on this CPU)
+#define BLOCK_WIDTH 32 // a 32x32 block of uint32s uses 32K of memory (64K of L1 cache on this CPU)
 #define BLOCK_VEC_WIDTH BLOCK_WIDTH / SIMD_INT_WIDTH
 
 
@@ -16,6 +16,7 @@ int read_mat(char *fname, int *n, float **dst);
 void print_mat(float *mat, int n);
 double get_gflops(std::size_t us, std::size_t n);
 void cblas_semm(float *mat1, float *mat2, float *dst, int n);
+void cpu_transpose(float *mat, int n);
 
 int main(int argv, char **argc)
 {
@@ -38,6 +39,8 @@ int main(int argv, char **argc)
     std::size_t time_sum = 0;
     //std::size_t n = 1000;
 
+    cpu_transpose(mat2, n);
+    print_mat(mat2, n);
     auto const start = std::chrono::high_resolution_clock::now();
     simd_gemm(mat1, mat2, dst, n);
     /*
@@ -77,14 +80,14 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
                 for (int idx_ay = 0; idx_ay < n; ++idx_ay)
                 {
                     //__m256 a_vec = _mm256_set1_ps(mat1 + idx_ay*n + idx_ax);
-                    for (int idx_bx = 0; idx_bx < BLOCK_WIDTH; ++idx_bx)
+                    for (int idx_by = 0; idx_by < BLOCK_WIDTH; ++idx_by)
                     {
-                        //__m256 intermediate_sum = _mm256_setzero_ps();
-                        __m256 sums = _mm256_loadu_ps(dst + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
+                        __m256 sums = _mm256_setzero_ps();
+                        //__m256 sums = _mm256_loadu_ps(dst + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
 
-                        for (int idx_by = 0; idx_by < BLOCK_VEC_WIDTH; idx_by += 8)
+                        for (int idx_bx = 0; idx_bx < BLOCK_WIDTH; idx_bx += 8)
                         {
-                            __m256 a_vec = _mm256_loadu_ps(mat1 + idx_ay*n + (idx_bby*BLOCK_WIDTH + idx_by));
+                            __m256 a_vec = _mm256_loadu_ps(mat1 + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
                             __m256 b_vec = _mm256_loadu_ps(mat2 + (idx_bby*BLOCK_WIDTH + idx_by)*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
                            sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
 
@@ -96,7 +99,7 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
                         float sum = 0;
                         for (int idx = 0; idx < 8; ++idx)
                             sum += res[idx];
-                        *(dst + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx)) = sum;
+                        *(dst + idx_ay*n + (idx_bby*BLOCK_WIDTH + idx_by)) += sum;
                     }
                 }
             //}
@@ -205,7 +208,7 @@ void cblas_semm(float *mat1, float *mat2, float *dst, int n)
         dst_fl[idx]  = 0;
     }
     
-    print_mat(mat1_fl, n);
+    print_mat(mat2_fl, n);
 
     cblas_sgemm( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
                  mat1_fl, n, mat2_fl, n, 1.0, dst_fl, n );
@@ -216,4 +219,17 @@ void cblas_semm(float *mat1, float *mat2, float *dst, int n)
         dst[idx] = dst_fl[idx];
     }
     
+}
+
+void cpu_transpose(float *mat, int n)
+{
+    for (int idx_y = 0; idx_y < n; ++idx_y)
+    {
+        for (int idx_x = idx_y+1; idx_x < n; ++idx_x)
+        {
+            float temp_upper = *(mat + idx_y*n + idx_x);
+            *(mat + idx_y*n + idx_x) = *(mat + idx_x*n + idx_y);
+            *(mat + idx_x*n + idx_y) = temp_upper;
+        }
+    }
 }
