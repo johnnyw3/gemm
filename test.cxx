@@ -7,7 +7,8 @@
 #define US_PER_S 1000000
 #define GIGA     1000000000
 #define SIMD_INT_WIDTH 8
-#define BLOCK_WIDTH 32 // a 32x32 block of uint32s uses 32K of memory (64K of L1 cache on this CPU)
+#define BLOCK_WIDTH 256 // a 256x256 block of floats uses 2M of memory (6M cache on this CPU - i5-8350u)
+                        // increase to 512 does lead to cache busting
 #define BLOCK_VEC_WIDTH BLOCK_WIDTH / SIMD_INT_WIDTH
 
 
@@ -26,12 +27,12 @@ int main(int argv, char **argc)
     read_mat(argc[1], &n, &mat1);
     read_mat(argc[2], &n, &mat2);
 
-    float *dst = (float*)malloc(sizeof(float) * n * n);
-    cblas_semm(mat1, mat2, dst, n);
+    float *dst = (float*)aligned_alloc(32, (sizeof(float) * n * n));
+    //cblas_semm(mat1, mat2, dst, n);
 
-    print_mat(dst, n);
-    free(dst);
-    dst = (float*)malloc(sizeof(float) * n * n);
+    //print_mat(dst, n);
+    //free(dst);
+    //dst = (float*)malloc(sizeof(float) * n * n);
     for (int idx = 0; idx < n; ++idx)
         for (int jdx = 0; jdx < n; ++jdx)
             *(dst + idx*n + jdx) = 0;
@@ -40,28 +41,24 @@ int main(int argv, char **argc)
     //std::size_t n = 1000;
 
     cpu_transpose(mat2, n);
-    print_mat(mat2, n);
+    //print_mat(mat2, n);
     auto const start = std::chrono::high_resolution_clock::now();
     simd_gemm(mat1, mat2, dst, n);
-    /*
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        __m256i v1 = _mm256_set_epi32(8, 7, 6, 5, 4, 3, 2, 1);
-        __m256i v2 = _mm256_set_epi32(2, 2, 2, 2, 2, 2, 2, 2);
-
-        __m256i dst = _mm256_mullo_epi32(v1, v2);
-    }
-    */
 
     auto const end = std::chrono::high_resolution_clock::now();
     time_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     printf("\n");
-    print_mat(dst, n);
+    //print_mat(dst, n);
     //uint32_t *res = (uint32_t*) &dst;
-    double gflops = get_gflops(time_sum, 2*n*n*n);
+    std::size_t n_large = n;
+    std::cout << 2*n_large*n_large*n_large << "\n";
+    double gflops = get_gflops(time_sum, 2*n_large*n_large*n_large);
     printf("Time: %zuus, gflops: %f\n", time_sum, gflops);
 
+    free(mat1);
+    free(mat2);
+    free(dst);
     return 0;
 
 }
@@ -87,19 +84,23 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
 
                         for (int idx_bx = 0; idx_bx < BLOCK_WIDTH; idx_bx += 8)
                         {
-                            __m256 a_vec = _mm256_loadu_ps(mat1 + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
-                            __m256 b_vec = _mm256_loadu_ps(mat2 + (idx_bby*BLOCK_WIDTH + idx_by)*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
-                           sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
+                            __m256 a_vec = _mm256_load_ps(mat1 + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
+                            __m256 b_vec = _mm256_load_ps(mat2 + (idx_bby*BLOCK_WIDTH + idx_by)*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
+                            sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
 
                         }
                         //sums = _mm256_set1_ps(1);
-                        float res[8];
+                        //float res[8];
                         //_mm256_storeu_ps(dst + idx_ay*n + (idx_bbx*BLOCK_WIDTH + idx_bx), sums);
-                        _mm256_storeu_ps(res, sums);
-                        float sum = 0;
-                        for (int idx = 0; idx < 8; ++idx)
-                            sum += res[idx];
-                        *(dst + idx_ay*n + (idx_bby*BLOCK_WIDTH + idx_by)) += sum;
+                        //_mm256_storeu_ps(res, sums);
+                        //float sum = 0;
+                        //for (int idx = 0; idx < 8; ++idx)
+                        //   sum += res[idx];
+                        __m256 sums2 = _mm256_hadd_ps(sums, sums);
+                        __m256 sums3 = _mm256_hadd_ps(sums2, sums2);
+                        float res[8];
+                        _mm256_store_ps(res, sums3);
+                        *(dst + idx_ay*n + (idx_bby*BLOCK_WIDTH + idx_by)) += res[0] + res[4];
                     }
                 }
             //}
@@ -156,9 +157,9 @@ int read_mat(char *fname, int *n, float **dst)
     }
 
     fscanf(fp, "%d", n);
-    std::cout << *n**n << "\n";
+    std::cout << *n << "\n";
 
-    *dst = (float*)malloc(sizeof(float) * *n * *n);
+    *dst = (float*)aligned_alloc(32, (sizeof(float) * *n * *n));
 
     for (int idx = 0; idx < *n**n; ++idx)
     {
@@ -199,19 +200,17 @@ double get_gflops(std::size_t us, std::size_t n)
 
 void cblas_semm(float *mat1, float *mat2, float *dst, int n)
 {
-    float mat1_fl[n*n], mat2_fl[n*n], dst_fl[n*n];
+    float dst_fl[n*n];
 
     for (int idx = 0; idx < n*n; ++idx)
     {
-        mat1_fl[idx] = mat1[idx];
-        mat2_fl[idx] = mat2[idx];
         dst_fl[idx]  = 0;
     }
     
-    print_mat(mat2_fl, n);
+    //print_mat(mat2_fl, n);
 
     cblas_sgemm( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
-                 mat1_fl, n, mat2_fl, n, 1.0, dst_fl, n );
+                 mat1, n, mat2, n, 1.0, dst_fl, n );
 
 
     for (int idx = 0; idx < n*n; ++idx)
@@ -220,6 +219,22 @@ void cblas_semm(float *mat1, float *mat2, float *dst, int n)
     }
     
 }
+
+#if 0
+int verify_matrix(float *exp, float *act, int n)
+{
+    for (int idx_x = 0; idx_x < n; ++idx_x)
+    {
+        for (int idx_y = 0; idx_y < n; ++idx_y)
+        {
+            if (*(exp + idx_y*n + idx_x) != *(act + idx_y*n + idx_x))
+            {
+                print("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx+y,  
+            }
+        }
+    }
+}
+#endif
 
 void cpu_transpose(float *mat, int n)
 {
