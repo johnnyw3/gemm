@@ -6,10 +6,10 @@
 
 #define US_PER_S 1000000
 #define GIGA     1000000000
-#define SIMD_INT_WIDTH 8
+#define SIMD_WIDTH 8
 #define BLOCK_WIDTH 256 // a 256x256 block of floats uses 2M of memory (6M cache on this CPU - i5-8350u)
                         // increase to 512 does lead to cache busting
-#define BLOCK_VEC_WIDTH BLOCK_WIDTH / SIMD_INT_WIDTH
+#define BLOCK_VEC_WIDTH BLOCK_WIDTH / SIMD_WIDTH
 
 
 void simd_gemm(float *mat1, float *mat2, float *dst, int n);
@@ -18,6 +18,7 @@ void print_mat(float *mat, int n);
 double get_gflops(std::size_t us, std::size_t n);
 void cblas_semm(float *mat1, float *mat2, float *dst, int n);
 void cpu_transpose(float *mat, int n);
+void verify_matrix(float *exp, float *act, int n);
 
 int main(int argv, char **argc)
 {
@@ -27,12 +28,12 @@ int main(int argv, char **argc)
     read_mat(argc[1], &n, &mat1);
     read_mat(argc[2], &n, &mat2);
 
-    float *dst = (float*)aligned_alloc(32, (sizeof(float) * n * n));
-    //cblas_semm(mat1, mat2, dst, n);
+    float *dst_cblas = (float*)aligned_alloc(32, (sizeof(float) * n * n));
+    cblas_semm(mat1, mat2, dst_cblas, n);
 
-    //print_mat(dst, n);
+    //print_mat(dst_cblas, n);
     //free(dst);
-    //dst = (float*)malloc(sizeof(float) * n * n);
+    float *dst = (float*)malloc(sizeof(float) * n * n);
     for (int idx = 0; idx < n; ++idx)
         for (int jdx = 0; jdx < n; ++jdx)
             *(dst + idx*n + jdx) = 0;
@@ -55,6 +56,8 @@ int main(int argv, char **argc)
     std::cout << 2*n_large*n_large*n_large << "\n";
     double gflops = get_gflops(time_sum, 2*n_large*n_large*n_large);
     printf("Time: %zuus, gflops: %f\n", time_sum, gflops);
+    
+    verify_matrix(dst_cblas, dst, n);
 
     free(mat1);
     free(mat2);
@@ -65,9 +68,40 @@ int main(int argv, char **argc)
 
 void simd_gemm(float *mat1, float *mat2, float *dst, int n)
 {
-    int vec_n = n / SIMD_INT_WIDTH;
+    int vec_n = n / SIMD_WIDTH;
     int block_n = n / BLOCK_WIDTH; 
+//#if 0
+    for (int i_outer = 0; i_outer < n; i_outer += BLOCK_WIDTH)
+    {
+        for (int j_outer = 0; j_outer < n; j_outer += BLOCK_WIDTH)
+        {
+            for (int k_outer = 0; k_outer < n; k_outer += BLOCK_WIDTH)
+            {
+                for (int i_inner = 0; i_inner < BLOCK_WIDTH; ++i_inner)
+                {
+                    for (int j_inner = 0; j_inner < BLOCK_WIDTH; ++j_inner)
+                    {
+                        __m256 sums = _mm256_setzero_ps();
 
+                        for (int k_inner = 0; k_inner < BLOCK_WIDTH; k_inner += SIMD_WIDTH)
+                        {
+                            __m256 a_vec = _mm256_load_ps(mat1 + (i_outer + i_inner)*n + (k_outer+k_inner) );
+                            __m256 b_vec = _mm256_load_ps(mat2 + (j_outer + j_inner)*n + (k_outer+k_inner) );
+                            sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
+                        }
+
+                        __m256 sums2 = _mm256_hadd_ps(sums, sums);
+                        __m256 sums3 = _mm256_hadd_ps(sums2, sums2);
+                        float res[8];
+                        _mm256_store_ps(res, sums3);
+                        *(dst + (i_outer + i_inner)*n + (j_outer + j_inner) ) += res[0] + res[4];
+                    }
+                }
+            }
+        }
+    }
+//#endif
+#if 0
     for (int idx_bbx = 0; idx_bbx < block_n; ++idx_bbx)
     {
         for (int idx_bby = 0; idx_bby < block_n; ++idx_bby)
@@ -106,46 +140,9 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
             //}
         }
     }
-
-}
-
-#if 0
-void simd_gemm(float *mat1, float *mat2, float *dst, int n)
-{
-    int vec_n = n / SIMD_INT_WIDTH;
-    int block_n = n / BLOCK_WIDTH; 
-
-    for (int idx_bbx = 0; idx_bbx < block_n; ++idx_bbx)
-    {
-        for (int idx_bby = 0; idx_bby < block_n; ++idx_bbx)
-        {
-            for (int idx_ax = 0; idx_ax < n; ++idx_ax)
-            {
-                for (int idx_ay = 0; idx_ay < vec_n; ++idx_ay)
-                {
-                    __m256 a_vec = _mm256_loadu_ps(mat1 + idx_ay*n + idx_ax);
-                    //__m256 a_vec = _mm256_set1_ps(mat1 + idx_ay*n + idx_ax);
-                    for (int idx_bx = 0; idx_bx < BLOCK_VEC_WIDTH; ++idx_bx)
-                    {
-                        __m256 intermediate_sum = _mm256_setzero_ps();
-                        //__m256 sums = _mm256_loadu_ps(dst + idx_ax
-
-                        for (int idx_by = 0; idx_by < BLOCK_VEC_WIDTH; idx_by += 8)
-                        {
-                            __m256 b_vec = _mm256_loadu_ps(mat2 + (idx_bby*BLOCK_WIDTH + idx_by)*n + (idx_bbx*BLOCK_WIDTH + idx_bx));
-
-                            
-                        }
-                    }
-                }
-                //_mm256_storeu_ps(dst + idx_ay*n + idx_ax, 
-                _mm256_ 
-            }
-        }
-    }
-
-}
 #endif
+}
+
 
 int read_mat(char *fname, int *n, float **dst)
 {
@@ -200,41 +197,47 @@ double get_gflops(std::size_t us, std::size_t n)
 
 void cblas_semm(float *mat1, float *mat2, float *dst, int n)
 {
-    float dst_fl[n*n];
+    //float dst_fl[n*n];
 
-    for (int idx = 0; idx < n*n; ++idx)
-    {
-        dst_fl[idx]  = 0;
-    }
+    //for (int idx = 0; idx < n*n; ++idx)
+    //{
+    //    dst_fl[idx]  = 0;
+    //}
     
     //print_mat(mat2_fl, n);
 
     cblas_sgemm( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
-                 mat1, n, mat2, n, 1.0, dst_fl, n );
+                 mat1, n, mat2, n, 1.0, dst, n );
 
 
-    for (int idx = 0; idx < n*n; ++idx)
-    {
-        dst[idx] = dst_fl[idx];
-    }
+    //for (int idx = 0; idx < n*n; ++idx)
+    //{
+    //    dst[idx] = dst_fl[idx];
+    //}
     
 }
 
-#if 0
-int verify_matrix(float *exp, float *act, int n)
+void verify_matrix(float *exp, float *act, int n)
 {
+    int incorrect = 0;
     for (int idx_x = 0; idx_x < n; ++idx_x)
     {
         for (int idx_y = 0; idx_y < n; ++idx_y)
         {
-            if (*(exp + idx_y*n + idx_x) != *(act + idx_y*n + idx_x))
+            float exp_val = *(exp + idx_y*n + idx_x);
+            float act_val = *(act + idx_y*n + idx_x);
+
+            if (exp_val != act_val)
             {
-                print("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx+y,  
+                printf("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx_y, exp_val, act_val);
+                incorrect = 1;
             }
         }
     }
+
+    if (!incorrect)
+        printf("Matricies are the same\n");
 }
-#endif
 
 void cpu_transpose(float *mat, int n)
 {
