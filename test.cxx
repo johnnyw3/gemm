@@ -7,8 +7,7 @@
 #define US_PER_S 1000000
 #define GIGA     1000000000
 #define SIMD_WIDTH 8
-#define BLOCK_WIDTH 256 // a 256x256 block of floats uses 2M of memory (6M cache on this CPU - i5-8350u)
-                        // increase to 512 does lead to cache busting
+#define BLOCK_WIDTH 64 // a 64x64 block of floats uses 16K of memory (64KB L1d cache on this CPU - i5-8350u)
 #define BLOCK_VEC_WIDTH BLOCK_WIDTH / SIMD_WIDTH
 
 
@@ -70,6 +69,8 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
 {
     int vec_n = n / SIMD_WIDTH;
     int block_n = n / BLOCK_WIDTH; 
+
+    float *mat1_ptr, *mat2_ptr, *dst_ptr;
 //#if 0
     for (int i_outer = 0; i_outer < n; i_outer += BLOCK_WIDTH)
     {
@@ -79,22 +80,32 @@ void simd_gemm(float *mat1, float *mat2, float *dst, int n)
             {
                 for (int i_inner = 0; i_inner < BLOCK_WIDTH; ++i_inner)
                 {
+                    mat1_ptr = mat1 + (i_outer + i_inner)*n + k_outer;
+                    _mm_prefetch(mat1_ptr, _MM_HINT_T0);
+
+                    dst_ptr = dst + (i_outer + i_inner)*n + j_outer;
+                    _mm_prefetch(dst_ptr, _MM_HINT_T0); 
+                    
                     for (int j_inner = 0; j_inner < BLOCK_WIDTH; ++j_inner)
                     {
+                        mat2_ptr = mat2 + (j_outer + j_inner)*n + k_outer;
+                        _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+
                         __m256 sums = _mm256_setzero_ps();
 
                         for (int k_inner = 0; k_inner < BLOCK_WIDTH; k_inner += SIMD_WIDTH)
                         {
-                            __m256 a_vec = _mm256_load_ps(mat1 + (i_outer + i_inner)*n + (k_outer+k_inner) );
-                            __m256 b_vec = _mm256_load_ps(mat2 + (j_outer + j_inner)*n + (k_outer+k_inner) );
+                            __m256 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
+                            __m256 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
                             sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
                         }
-
+                        
                         __m256 sums2 = _mm256_hadd_ps(sums, sums);
                         __m256 sums3 = _mm256_hadd_ps(sums2, sums2);
                         float res[8];
                         _mm256_store_ps(res, sums3);
-                        *(dst + (i_outer + i_inner)*n + (j_outer + j_inner) ) += res[0] + res[4];
+                        *( dst_ptr + j_inner ) += res[0] + res[4];
+                        
                     }
                 }
             }

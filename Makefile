@@ -2,7 +2,7 @@
 OPENBLAS_NUM_THREADS?="$$(nproc)"
 
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -lopenblas -g
+CXXFLAGS?=-march=$(TARGET) -lopenblas -g -O3
 
 
 all: test
