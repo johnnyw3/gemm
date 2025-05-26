@@ -1,3 +1,12 @@
+# Build
+
+You should have OpenBLAS installed in order to use the `bench` program.
+
+To build, use the given makefile, specifying your march. For example:
+
+```bash
+$ make TARGET=skylake
+```
 
 # References
 
