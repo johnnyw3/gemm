@@ -3,33 +3,8 @@
 #include <x86intrin.h>
 #include <stdint.h>
 #include <cblas.h>
-
-#define US_PER_S 1000000
-#define GIGA     1000000000
-
-#ifdef __AVX512F__
-#define SIMD_WIDTH 64   // in bytes -> 512-bit (AVX512)
-#elif defined(__AVX2__)
-#define SIMD_WIDTH 32   // in bytes -> 256-bit (AVX2)
-#else
-#define SIMD_WIDTH 16   // in bytes -> 128-bit (original AVX)
-#endif
-
-#define BLOCK_WIDTH 512 // in bytes -> 128x128 block
-                        // a 64x64 block of floats uses 16K of memory (64KB L1d cache on this CPU - i5-8350u)
-
-// PROTOTYPES
-template<typename T>
-void simd_gemm(T *mat1, T *mat2, T *dst, int n);
-
-inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int simd_ele_width, int block_ele_width);
-inline void gemm_inner(double *mat1_ptr, double *mat2_ptr, double *dst_ptr, int simd_ele_width, int block_ele_width);
-int read_mat(char *fname, int *n, float **dst);
-void print_mat(float *mat, int n);
-double get_gflops(std::size_t us, std::size_t n);
-void cblas_semm(float *mat1, float *mat2, float *dst, int n);
-void cpu_transpose(float *mat, int n);
-void verify_matrix(float *exp, float *act, int n);
+#include "simd_common.h"
+#include "gemm.h"
 
 int main(int argv, char **argc)
 {
@@ -44,10 +19,10 @@ int main(int argv, char **argc)
     cblas_semm(mat1, mat2, dst_cblas, n);
     //print_mat(dst_cblas, n);
 
-    float *dst = (float*)malloc(sizeof(float) * n * n);
+    float *dst = (float*)aligned_alloc(32, 8 * sizeof(float) * n * n);
     for (int idx = 0; idx < n; ++idx)
-        for (int jdx = 0; jdx < n; ++jdx)
-            *(dst + idx*n + jdx) = 0;
+        for (int jdx = 0; jdx < n*8; ++jdx)
+            *(dst + idx*n*8 + jdx) = 0;
 
     std::size_t time_sum = 0;
 
@@ -62,11 +37,11 @@ int main(int argv, char **argc)
         time_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
         //print_mat(dst, n);
-        verify_matrix(dst_cblas, dst, n);
+        //verify_matrix(dst_cblas, dst, n);
 
         for (int idx = 0; idx < n; ++idx)
-            for (int jdx = 0; jdx < n; ++jdx)
-                *(dst + idx*n + jdx) = 0;
+            for (int jdx = 0; jdx < n*8; ++jdx)
+                *(dst + idx*n*8 + jdx) = 0;
     }
 
     printf("\n");
@@ -102,7 +77,7 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
                     mat1_ptr = mat1 + (i_outer + i_inner)*n + k_outer;
                     _mm_prefetch(mat1_ptr, _MM_HINT_T0);
 
-                    dst_ptr = dst + (i_outer + i_inner)*n + j_outer;
+                    dst_ptr = dst + (i_outer + i_inner)*n*8 + j_outer * 8;
                     _mm_prefetch(dst_ptr, _MM_HINT_T0); 
                     
                     for (int j_inner = 0; j_inner < block_ele_width; ++j_inner)
@@ -110,19 +85,46 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
                         mat2_ptr = mat2 + (j_outer + j_inner)*n + k_outer;
                         _mm_prefetch(mat2_ptr, _MM_HINT_T0);
 
-                        gemm_inner(mat1_ptr, mat2_ptr, dst_ptr + j_inner, simd_ele_width, block_ele_width);
+                        gemm_inner(mat1_ptr, mat2_ptr, dst_ptr + j_inner*8, simd_ele_width, block_ele_width);
                     }
                 }
             }
         }
     }
+
+#if 0
+    __m256 res_vec1, res_vec2, sums2, sums3; 
+    float res[simd_ele_width];
+    float *dst_ptr_res;
+    dst_ptr = dst;
+
+    for (int idx = 0; idx < n; ++idx)
+    {
+        dst_ptr     = dst + idx*n*simd_ele_width;
+        dst_ptr_res = dst + idx*n;
+
+        for (int jdx = 0; jdx < n; jdx += 2)
+        {
+            res_vec1 = _mm256_load_ps( dst_ptr + jdx*simd_ele_width);
+            res_vec2 = _mm256_load_ps( dst_ptr + jdx*simd_ele_width + simd_ele_width);
+            sums2 = _mm256_hadd_ps(res_vec1, res_vec2);
+            sums3 = _mm256_hadd_ps(sums2, sums2);
+            _mm256_store_ps(res, sums3);
+
+            *( dst_ptr_res + jdx )     = sums3[0] + sums3[4];
+            *( dst_ptr_res + jdx + 1 ) = sums3[1] + sums3[5];
+        }
+    }
+#endif
 }
 
 
 inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int simd_ele_width, int block_ele_width)
 {
     __m256 a_vec, b_vec;
-    __m256 sums = _mm256_setzero_ps();
+    __m256 sums = _mm256_load_ps(dst_ptr); 
+    //__m256 sums = _mm256_setzero_ps();
+    //printf("dst_ptr: %p\n", dst_ptr);
 
     for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
     {
@@ -131,12 +133,14 @@ inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int sim
         sums = _mm256_fmadd_ps(a_vec, b_vec, sums);
     }
     
+    /*
     __m256 sums2 = _mm256_hadd_ps(sums, sums);
     __m256 sums3 = _mm256_hadd_ps(sums2, sums2);
     float res[simd_ele_width];
     _mm256_store_ps(res, sums3);
     *( dst_ptr ) += res[0] + res[4];
-
+    */
+    _mm256_store_ps(dst_ptr, sums);
 }
 
 inline void gemm_inner(double *mat1_ptr, double *mat2_ptr, double *dst_ptr, int simd_ele_width, int block_ele_width)
