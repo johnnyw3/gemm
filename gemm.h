@@ -1,6 +1,7 @@
 #ifndef __GEMM_H__
 #define __GEMM_H__ 1
 #include <x86intrin.h>
+#include <omp.h>
 
 #define US_PER_S 1000000
 #define GIGA     1000000000
@@ -23,9 +24,13 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
     int vec_n = n / simd_ele_width;
 
     float *mat1_ptr, *mat2_ptr, *dst_ptr;
+    T temp[simd_ele_width]  __attribute__ ((__aligned__(32)));
 
+    #pragma omp parallel for private(mat1_ptr, mat2_ptr, dst_ptr, temp)
+    // collapse(2)
     for (int i_outer = 0; i_outer < n; i_outer += block_ele_width)
     {
+        //printf("thread: %d; i_outer: %d\n", omp_get_thread_num(), i_outer);
         for (int j_outer = 0; j_outer < n; j_outer += block_ele_width)
         {
             //T dst_tmp[block_ele_width*block_ele_width];
@@ -42,7 +47,6 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
                     
                     for (int j_inner = 0; j_inner < block_ele_width; j_inner += simd_ele_width)
                     {
-                        T temp[simd_ele_width]  __attribute__ ((__aligned__(32)));
                         for (int j_inner_inner = 0; j_inner_inner < simd_ele_width; ++j_inner_inner)
                         {
                             mat2_ptr = mat2 + (j_outer + j_inner + j_inner_inner)*n + k_outer;

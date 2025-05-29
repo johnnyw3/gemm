@@ -5,7 +5,7 @@ OPENBLAS_NUM_THREADS?="$$(nproc)"
 TEMP_FNAME=$(shell date +%FT%H:%M:%S)_log.txt
 
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -g -O3 -fsave-optimization-record
+CXXFLAGS?=-march=$(TARGET) -g -O3 -fsave-optimization-record -fopenmp
 
 all: bench 
 

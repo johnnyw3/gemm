@@ -2,13 +2,23 @@
 #include <chrono>
 #include <stdint.h>
 #include <cblas.h>
+#include <omp.h>
 #include "simd_common.h"
 #include "gemm.h"
 #include "bench.h"
 
 int main(int argv, char **argc)
 {
-    printf("Using %d-wide SIMD\n", SIMD_WIDTH*8);
+    int num_threads;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        num_threads = omp_get_num_threads();
+    }
+#else
+    num_threads = 1;
+#endif
+    printf("Using %d-wide SIMD, %d threads\n", SIMD_WIDTH*8, num_threads);
 
     float *mat1, *mat2;
     int n;
