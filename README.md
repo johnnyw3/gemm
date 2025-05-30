@@ -1,9 +1,7 @@
-## Prerequisites
-
-For the library:
-    - OpenMP
+# Prerequisites
 
 For the `bench` program:
+
     - OpenBLAS (for verifying correctness and providing a baseline to compare against)
 
 # Build
@@ -12,6 +10,13 @@ To build, use the given makefile, specifying your march. For example:
 
 ```bash
 $ make TARGET=skylake
+```
+
+By default, OpenMP is enabled to take advantage of multi-core systems. To
+disable OpenMP, pass `USE_OPENMP=no`:
+
+```bash
+$ make TARGET=skylake USE_OPENMP=no
 ```
 
 # References

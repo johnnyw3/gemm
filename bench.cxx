@@ -11,6 +11,7 @@ int main(int argv, char **argc)
 {
     int num_threads;
 #ifdef _OPENMP
+    // verify OpenMP operation
     #pragma omp parallel
     {
         num_threads = omp_get_num_threads();

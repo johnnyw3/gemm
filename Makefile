@@ -1,11 +1,13 @@
-# set up thread count for multithreaded baseline
-OPENBLAS_NUM_THREADS?="$$(nproc)"
-
 # for logging etc
 TEMP_FNAME=$(shell date +%FT%H:%M:%S)_log.txt
 
+USE_OPENMP?=yes
+ifeq ($(USE_OPENMP),yes)
+OPENMP_FLAG=-fopenmp
+endif
+
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -g -O3 -fsave-optimization-record -fopenmp
+CXXFLAGS?=-march=$(TARGET) -g -O3 -fsave-optimization-record $(OPENMP_FLAG)
 
 all: bench 
 
