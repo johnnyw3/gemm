@@ -1,7 +1,6 @@
 #include <iostream>
 #include <stdint.h>
 #include "simd_common.h"
-#include "gemm.h"
 
 void cpu_transpose(float *mat, int n)
 {

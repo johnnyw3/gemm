@@ -34,7 +34,7 @@ int main(int argv, char **argc)
     auto const end = std::chrono::high_resolution_clock::now();
     std::size_t time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     double gflops = get_gflops(time, 2*n_large*n_large*n_large);
-    printf("OpenBLAS time: %zuus, gflops: %f\n", time, gflops);
+    printf("OpenBLAS time: %lfs, gflops: %f\n", time*1.0/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
     float *dst = (float*)aligned_alloc(32, 8 * sizeof(float) * n * n);
@@ -66,7 +66,7 @@ int main(int argv, char **argc)
     printf("\n");
 
     gflops = get_gflops(time_sum, 5*2*n_large*n_large*n_large);
-    printf("Avg time: %zuus, gflops: %f\n", time_sum/5, gflops);
+    printf("Avg time: %lfs, gflops: %f\n", time_sum/5.0/US_PER_S, gflops);
     
     free(mat1);
     free(mat2);

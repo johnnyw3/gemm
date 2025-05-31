@@ -2,6 +2,7 @@
 #define __GEMM_H__ 1
 #include <x86intrin.h>
 #include <omp.h>
+#include <pthread.h>
 
 #define US_PER_S 1000000
 #define GIGA     1000000000
@@ -11,25 +12,66 @@
 
 template<typename T>
 void simd_gemm(T *mat1, T *mat2, T *dst, int n);
+void* simd_gemm_worker(void *argv);
 
 inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int simd_ele_width, int block_ele_width);
 inline void gemm_inner(double *mat1_ptr, double *mat2_ptr, double *dst_ptr, int simd_ele_width, int block_ele_width);
 void cpu_transpose(float *mat, int n);
 
+typedef struct{
+    float *mat1;
+    float *mat2;
+    float *dst;
+    int    n;
+    int    num_thds;
+    int    th_id;
+} gemmOptns;
+
 template<typename T>
-void simd_gemm(T *mat1, T *mat2, T *dst, int n)
+void simd_gemm(T * __restrict mat1, T * __restrict mat2, T * __restrict dst, int n)
 {
-    int simd_ele_width  = SIMD_WIDTH  / sizeof(T);
-    int block_ele_width = BLOCK_WIDTH / sizeof(T);
+
+    int num_thds = 4;
+    gemmOptns thd_optns[num_thds];
+    pthread_t thds[num_thds];
+
+    for (int th_id = 0; th_id < num_thds; ++th_id)
+    {
+        gemmOptns optn =  {mat1, mat2, dst, n, num_thds, th_id};
+        thd_optns[th_id] = optn;
+        pthread_create(&thds[th_id], NULL, &simd_gemm_worker, (void*)&thd_optns[th_id]);
+
+    }
+
+    for (int th_id = 0; th_id < num_thds; ++th_id)
+    {
+        pthread_join(thds[th_id], NULL);
+    }
+
+}
+
+void* simd_gemm_worker(void *argv)
+{
+    gemmOptns *optns = (gemmOptns*)argv;
+    float *mat1 = optns->mat1;
+    float *mat2 = optns->mat2;
+    float *dst  = optns->dst;
+    int    n    = optns->n;
+    int    num_thds = optns->num_thds;
+    int    th_id = optns->th_id;
+    int    start_idx = (n / num_thds) * th_id;
+    int    stop_idx  = start_idx + n / num_thds;
+
+    int simd_ele_width  = SIMD_WIDTH  / sizeof(float);
+    int block_ele_width = BLOCK_WIDTH / sizeof(float);
     int vec_n = n / simd_ele_width;
 
     float *mat1_ptr, *mat2_ptr, *dst_ptr;
 
     #pragma omp parallel for private(mat1_ptr, mat2_ptr, dst_ptr)
     // collapse(2)
-    for (int i_outer = 0; i_outer < n; i_outer += block_ele_width)
+    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += block_ele_width)
     {
-        //printf("thread: %d; i_outer: %d\n", omp_get_thread_num(), i_outer);
         for (int j_outer = 0; j_outer < n; j_outer += block_ele_width)
         {
             for (int k_outer = 0; k_outer < n; k_outer += block_ele_width)
@@ -51,8 +93,8 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
                             __m256 a_vec, b_vec;
                             __m256 dst2 = _mm256_setzero_ps();
 
-                            __m256 sums1 = _mm256_setzero_ps();
-                            __m256 sums2 = _mm256_setzero_ps();
+                            __m256 sums1  = _mm256_setzero_ps();
+                            __m256 sums2  = _mm256_setzero_ps();
                             mat2_ptr = mat2 + (j_outer + j_inner + 0)*n + k_outer;
                             _mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
@@ -186,7 +228,7 @@ void simd_gemm(T *mat1, T *mat2, T *dst, int n)
             }
         }
     }
-
+    return NULL;
 }
 
 inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int simd_ele_width, int block_ele_width)

@@ -7,17 +7,18 @@ OPENMP_FLAG=-fopenmp
 endif
 
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -g -O3 -fsave-optimization-record $(OPENMP_FLAG)
+CXXFLAGS?=-march=$(TARGET) -g -O3 -flto -fsave-optimization-record $(OPENMP_FLAG)
+CC=clang++
 
 all: bench 
 
 build/libgemm.a: gemm.cxx gemm.h simd_common.h
 	@mkdir -p build
-	clang++ -o build/gemm.o -c gemm.cxx $(CXXFLAGS) 
+	$(CC) -o build/gemm.o -c gemm.cxx $(CXXFLAGS) 
 	ar rcs build/libgemm.a build/gemm.o
 
 bench: build/libgemm.a bench.cxx bench.h
-	clang++ -o build/bench bench.cxx -Lbuild -lgemm -lopenblas $(CXXFLAGS)
+	$(CC) -o build/bench bench.cxx -Lbuild -lgemm -lopenblas $(CXXFLAGS)
 
 .PHONY: clean perf_report
 perf_report: bench
