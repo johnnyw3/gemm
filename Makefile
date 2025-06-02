@@ -1,20 +1,17 @@
 # for logging etc
 TEMP_FNAME=$(shell date +%FT%H:%M:%S)_log.txt
 
-USE_OPENMP?=yes
-ifeq ($(USE_OPENMP),yes)
-OPENMP_FLAG=-fopenmp
-endif
+NUM_THREADS?=$(shell nproc)
 
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -g -O3 -flto -fsave-optimization-record $(OPENMP_FLAG)
+CXXFLAGS?=-march=$(TARGET) -g -O3 -flto -fsave-optimization-record -DNUM_THREADS=$(NUM_THREADS)
 CC=clang++
 
-all: bench 
+all: bench
 
 build/libgemm.a: gemm.cxx gemm.h simd_common.h
 	@mkdir -p build
-	$(CC) -o build/gemm.o -c gemm.cxx $(CXXFLAGS) 
+	$(CC) -o build/gemm.o -c gemm.cxx $(CXXFLAGS)
 	ar rcs build/libgemm.a build/gemm.o
 
 bench: build/libgemm.a bench.cxx bench.h
