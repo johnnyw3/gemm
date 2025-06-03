@@ -16,7 +16,7 @@ int main(int argv, char **argc)
     read_mat(argc[2], &n, &mat2);
     std::size_t n_large = n;
 
-    float *dst_cblas = (float*)aligned_alloc(32, (sizeof(float) * n * n));
+    float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
     auto const start = std::chrono::high_resolution_clock::now();
     cblas_semm(mat1, mat2, dst_cblas, n);
 
@@ -26,7 +26,7 @@ int main(int argv, char **argc)
     printf("OpenBLAS time: %lfs, gflops: %f\n", time*1.0/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
-    float *dst = (float*)aligned_alloc(32, 8 * sizeof(float) * n * n);
+    float *dst = (float*)aligned_alloc(64, 8 * sizeof(float) * n * n);
     for (int idx = 0; idx < n; ++idx)
         for (int jdx = 0; jdx < n; ++jdx)
             *(dst + idx*n + jdx) = 0;
@@ -76,7 +76,7 @@ int read_mat(char *fname, int *n, float **dst)
     fscanf(fp, "%d", n);
     std::cout << *n << "\n";
 
-    *dst = (float*)aligned_alloc(32, (sizeof(float) * *n * *n));
+    *dst = (float*)aligned_alloc(64, (sizeof(float) * *n * *n));
 
     for (int idx = 0; idx < *n**n; ++idx)
     {

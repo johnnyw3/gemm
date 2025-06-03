@@ -6,7 +6,7 @@
 #define US_PER_S 1000000
 #define GIGA     1000000000
 
-#define BLOCK_WIDTH 64 // in bytes -> 128x128 block
+#define BLOCK_WIDTH 64  // in bytes -> 128x128 block
                         // a 64x64 block of floats uses 16K of memory (64KB L1d cache on this CPU - i5-8350u)
 
 template<typename T>
@@ -61,7 +61,7 @@ void* simd_gemm_worker(void *argv)
     int block_ele_width = BLOCK_WIDTH / sizeof(float);
     int vec_n = n / simd_ele_width;
 
-    float *mat1_ptr, *mat2_ptr, *dst_ptr;
+    float * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict dst_ptr;
 
     for (int i_outer = start_idx; i_outer < stop_idx; i_outer += block_ele_width)
     {
@@ -72,7 +72,7 @@ void* simd_gemm_worker(void *argv)
                 for (int i_inner = 0; i_inner < block_ele_width; ++i_inner)
                 {
                     mat1_ptr = mat1 + (i_outer + i_inner)*n + k_outer;
-                    _mm_prefetch(mat1_ptr, _MM_HINT_T0);
+                    //_mm_prefetch(mat1_ptr, _MM_HINT_T0);
 
                     //dst_ptr = dst_tmp + i_inner*block_ele_width; // + (i_outer + i_inner)*n + j_outer;
                     dst_ptr = dst + (i_outer + i_inner)*n + j_outer;
@@ -89,7 +89,7 @@ void* simd_gemm_worker(void *argv)
                             __m256 sums1  = _mm256_setzero_ps();
                             __m256 sums2  = _mm256_setzero_ps();
                             mat2_ptr = mat2 + (j_outer + j_inner + 0)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -98,7 +98,7 @@ void* simd_gemm_worker(void *argv)
                             }
 
                             mat2_ptr = mat2 + (j_outer + j_inner + 1)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -118,7 +118,7 @@ void* simd_gemm_worker(void *argv)
                             sums1 = _mm256_setzero_ps();
                             sums2 = _mm256_setzero_ps();
                             mat2_ptr = mat2 + (j_outer + j_inner + 2)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -127,7 +127,7 @@ void* simd_gemm_worker(void *argv)
                             }
 
                             mat2_ptr = mat2 + (j_outer + j_inner + 3)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -147,7 +147,7 @@ void* simd_gemm_worker(void *argv)
                             sums1 = _mm256_setzero_ps();
                             sums2 = _mm256_setzero_ps();
                             mat2_ptr = mat2 + (j_outer + j_inner + 4)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -156,7 +156,7 @@ void* simd_gemm_worker(void *argv)
                             }
 
                             mat2_ptr = mat2 + (j_outer + j_inner + 5)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -176,7 +176,7 @@ void* simd_gemm_worker(void *argv)
                             sums1 = _mm256_setzero_ps();
                             sums2 = _mm256_setzero_ps();
                             mat2_ptr = mat2 + (j_outer + j_inner + 6)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -185,7 +185,7 @@ void* simd_gemm_worker(void *argv)
                             }
 
                             mat2_ptr = mat2 + (j_outer + j_inner + 7)*n + k_outer;
-                            _mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
