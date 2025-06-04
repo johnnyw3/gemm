@@ -62,6 +62,7 @@ void* simd_gemm_worker(void *argv)
     int vec_n = n / simd_ele_width;
 
     float * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict dst_ptr;
+    float * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
 
     for (int i_outer = start_idx; i_outer < stop_idx; i_outer += block_ele_width)
     {
@@ -80,134 +81,88 @@ void* simd_gemm_worker(void *argv)
                     
                     for (int j_inner = 0; j_inner < block_ele_width; j_inner += simd_ele_width)
                     {
-                        //for (int j_inner_inner = 0; j_inner_inner < simd_ele_width; ++j_inner_inner)
-                        //{
 
-                            __m256 a_vec, b_vec;
+                            __m256 a_vec, b_vec, b_vec2, b_vec3, b_vec4;
                             __m256 dst2 = _mm256_setzero_ps();
 
-                            __m256 sums1  = _mm256_setzero_ps();
-                            __m256 sums2  = _mm256_setzero_ps();
-                            mat2_ptr = mat2 + (j_outer + j_inner + 0)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            __m256 sums[simd_ele_width];
+                            for (int idx = 0; idx < simd_ele_width; ++idx)
+                                sums[idx] = _mm256_setzero_ps();
+
+                            mat2_ptr  = mat2 + (j_outer + j_inner + 0)*n + k_outer;
+                            mat2_ptr2 = mat2 + (j_outer + j_inner + 1)*n + k_outer;
+                            mat2_ptr3 = mat2 + (j_outer + j_inner + 2)*n + k_outer;
+                            mat2_ptr4 = mat2 + (j_outer + j_inner + 3)*n + k_outer;
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums1 = _mm256_fmadd_ps(a_vec, b_vec, sums1);
+                                sums[0] = _mm256_fmadd_ps(a_vec, b_vec, sums[0]);
+                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
+                                sums[1] = _mm256_fmadd_ps(a_vec, b_vec2, sums[1]);
+                                b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
+                                sums[2] = _mm256_fmadd_ps(a_vec, b_vec3, sums[2]);
+                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
+                                sums[3] = _mm256_fmadd_ps(a_vec, b_vec4, sums[3]);
                             }
 
-                            mat2_ptr = mat2 + (j_outer + j_inner + 1)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
+                            mat2_ptr  = mat2 + (j_outer + j_inner + 4)*n + k_outer;
+                            mat2_ptr2 = mat2 + (j_outer + j_inner + 5)*n + k_outer;
+                            mat2_ptr3 = mat2 + (j_outer + j_inner + 6)*n + k_outer;
+                            mat2_ptr4 = mat2 + (j_outer + j_inner + 7)*n + k_outer;
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2 = _mm256_fmadd_ps(a_vec, b_vec, sums2);
+                                sums[4] = _mm256_fmadd_ps(a_vec, b_vec, sums[4]);
+                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
+                                sums[5] = _mm256_fmadd_ps(a_vec, b_vec2, sums[5]);
+                                b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
+                                sums[6] = _mm256_fmadd_ps(a_vec, b_vec3, sums[6]);
+                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
+                                sums[7] = _mm256_fmadd_ps(a_vec, b_vec4, sums[7]);
                             }
-                            __m256 lower = _mm256_permute2f128_ps(sums1, sums2, 0x20);
-                            __m256 upper = _mm256_permute2f128_ps(sums1, sums2, 0x31);
+
+                            __m256 lower = _mm256_permute2f128_ps(sums[0], sums[1], 0x20);
+                            __m256 upper = _mm256_permute2f128_ps(sums[0], sums[1], 0x31);
                             __m256 hsum  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_permute2f128_ps(sums[2], sums[3], 0x20);
+                            upper = _mm256_permute2f128_ps(sums[2], sums[3], 0x31);
                             __m256 shuf  = _mm256_permute_ps(hsum, 0x1B);
                                    hsum  = _mm256_add_ps(hsum, shuf);
                                    shuf  = _mm256_permute_ps(hsum, 0xB1);
                                    hsum  = _mm256_add_ps(hsum, shuf);
                             dst2 = _mm256_blend_ps(dst2, hsum, 0x21);
-                            
-                            
-                            sums1 = _mm256_setzero_ps();
-                            sums2 = _mm256_setzero_ps();
-                            mat2_ptr = mat2 + (j_outer + j_inner + 2)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums1 = _mm256_fmadd_ps(a_vec, b_vec, sums1);
-                            }
 
-                            mat2_ptr = mat2 + (j_outer + j_inner + 3)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2 = _mm256_fmadd_ps(a_vec, b_vec, sums2);
-                            }
-                            lower = _mm256_permute2f128_ps(sums1, sums2, 0x20);
-                            upper = _mm256_permute2f128_ps(sums1, sums2, 0x31);
                             hsum  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_permute2f128_ps(sums[4], sums[5], 0x20);
+                            upper = _mm256_permute2f128_ps(sums[4], sums[5], 0x31);
                             shuf  = _mm256_permute_ps(hsum, 0x1B);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             shuf  = _mm256_permute_ps(hsum, 0xB1);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             dst2  = _mm256_blend_ps(dst2, hsum, 0x84);
-                            
 
-                            sums1 = _mm256_setzero_ps();
-                            sums2 = _mm256_setzero_ps();
-                            mat2_ptr = mat2 + (j_outer + j_inner + 4)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums1 = _mm256_fmadd_ps(a_vec, b_vec, sums1);
-                            }
-
-                            mat2_ptr = mat2 + (j_outer + j_inner + 5)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2 = _mm256_fmadd_ps(a_vec, b_vec, sums2);
-                            }
-                            lower = _mm256_permute2f128_ps(sums1, sums2, 0x20);
-                            upper = _mm256_permute2f128_ps(sums1, sums2, 0x31);
                             hsum  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_permute2f128_ps(sums[6], sums[7], 0x20);
+                            upper = _mm256_permute2f128_ps(sums[6], sums[7], 0x31);
                             shuf  = _mm256_permute_ps(hsum, 0x1B);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             shuf  = _mm256_permute_ps(hsum, 0xB1);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             dst2  = _mm256_blend_ps(dst2, hsum, 0x12);
-                            
 
-                            sums1 = _mm256_setzero_ps();
-                            sums2 = _mm256_setzero_ps();
-                            mat2_ptr = mat2 + (j_outer + j_inner + 6)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums1 = _mm256_fmadd_ps(a_vec, b_vec, sums1);
-                            }
-
-                            mat2_ptr = mat2 + (j_outer + j_inner + 7)*n + k_outer;
-                            //_mm_prefetch(mat2_ptr, _MM_HINT_T0);
-                            for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2 = _mm256_fmadd_ps(a_vec, b_vec, sums2);
-                            }
-                            lower = _mm256_permute2f128_ps(sums1, sums2, 0x20);
-                            upper = _mm256_permute2f128_ps(sums1, sums2, 0x31);
                             hsum  = _mm256_add_ps(lower, upper);
                             shuf  = _mm256_permute_ps(hsum, 0x1B);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             shuf  = _mm256_permute_ps(hsum, 0xB1);
                             hsum  = _mm256_add_ps(hsum, shuf);
                             dst2  = _mm256_blend_ps(dst2, hsum, 0x48);
-                            //*( dst_ptr ) = _mm256_reduce_add_ps(sums);
 
-                            //gemm_inner(mat1_ptr, mat2_ptr, temp + j_inner_inner, simd_ele_width, block_ele_width);
                             __m256 swapd = _mm256_permute2f128_ps(dst2, dst2, 0x21);
                             dst2 = _mm256_blend_ps(dst2, swapd, 0xAA);
                             swapd = _mm256_permute_ps(dst2, 0xB1);
                             dst2 = _mm256_blend_ps(dst2, swapd, 0xF0);
-                        //}
 
                         //__m256 sums = _mm256_load_ps(temp); 
                         //__m256 sums = _mm256_setzero_ps(); 
