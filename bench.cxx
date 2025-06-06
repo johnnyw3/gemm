@@ -34,6 +34,8 @@ int main(int argv, char **argc)
     std::size_t time_sum = 0;
 
     cpu_transpose(mat2, n);
+    //cpu_transpose(mat1, n);
+    //cpu_transpose(dst, n);
 
     for (int idx = 0; idx < 5; ++idx)
     {
