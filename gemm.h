@@ -9,6 +9,7 @@
 
 #define BLOCK_WIDTH 256 // in bytes -> 128x128 block
                         // a 64x64 block of floats uses 16K of memory (64KB L1d cache on this CPU - i5-8350u)
+#define SBLOCK_WIDTH 2048 
 
 template<typename T>
 void simd_gemm(T *mat1, T *mat2, T *dst, int n);
@@ -46,8 +47,7 @@ void simd_gemm(float * __restrict mat1, float * __restrict mat2, float * __restr
     }
 
 }
-
-void* simd_gemm_worker(void *argv)
+void* simd_gemm_worker2(void *argv)
 {
     gemmOptns *optns = (gemmOptns*)argv;
     float *mat1 = optns->mat1;
@@ -68,26 +68,124 @@ void* simd_gemm_worker(void *argv)
 
     for (int i_outer = start_idx; i_outer < stop_idx; i_outer += block_ele_width)
     {
-        for (int j_outer = 0; j_outer < n; j_outer += block_ele_width)
+        for (int k_outer = 0; k_outer < n; k_outer += block_ele_width)
         {
-            for (int k_outer = 0; k_outer < n; k_outer += block_ele_width)
+            for (int j_outer = 0; j_outer < n; j_outer += block_ele_width)
             {
-                float packed_b[block_ele_width*block_ele_width] __attribute__ ((__aligned__(64)));
-                float packed_a[block_ele_width*block_ele_width] __attribute__ ((__aligned__(64)));
-
-                for (int idx = 0; idx < block_ele_width; ++idx)
-                {
-                    memcpy(packed_b + idx*block_ele_width, mat2 + (j_outer + idx)*n + k_outer, BLOCK_WIDTH);
-                    memcpy(packed_a + idx*block_ele_width, mat1 + (i_outer + idx)*n + k_outer, BLOCK_WIDTH);
-                }
-
-                for (int i_inner = 0; i_inner < block_ele_width; ++i_inner)
-                {
-                    mat1_ptr = packed_a + (i_inner)*block_ele_width;
+                //for (int i_inner = 0; i_inner < block_ele_width; ++i_inner)
+                //{
                     //_mm_prefetch(mat1_ptr, _MM_HINT_T0);
 
                     //dst_ptr = dst_tmp + i_inner*block_ele_width; // + (i_outer + i_inner)*n + j_outer;
-                    dst_ptr = dst + (i_outer + i_inner)*n + j_outer;
+                    dst_ptr  = dst  + (j_outer)*n + i_outer;
+                    mat1_ptr = mat1 + (k_outer)*n + i_outer;
+                    mat2_ptr = mat2 + (j_outer)*n + k_outer;
+                    //_mm_prefetch(dst_ptr, _MM_HINT_T0); 
+
+                    __m256 block[8], a_vec, b_vec;
+                    for (int j_inner = 0; j_inner < block_ele_width; ++j_inner)
+                    {
+                        block[j_inner] = _mm256_load_ps(dst_ptr);
+                        dst_ptr += n;
+                    }
+                    
+                    for (int k_inner = 0; k_inner < block_ele_width; ++k_inner)
+                    {
+                        //b_vec = _mm256_load_ps(mat2_ptr + 
+                        a_vec = _mm256_load_ps(mat1_ptr + k_inner*block_ele_width);
+                        for (int j_inner = 0; j_inner < block_ele_width; ++j_inner)
+                        {
+                            b_vec = _mm256_broadcast_ss(mat2_ptr + j_inner*block_ele_width +  k_inner);
+                            block[j_inner] = _mm256_fmadd_ps(a_vec, b_vec, block[j_inner]);
+                        }
+
+                    }
+
+                    dst_ptr  = dst  + (j_outer)*n + i_outer;
+                    for (int j_inner = 0; j_inner < block_ele_width; ++j_inner)
+                    {
+                        _mm256_store_ps(dst_ptr, block[j_inner]);
+                        dst_ptr += n;
+                    }
+                    
+                    /*
+                    for (int k_inner = 0; k_inner < block_ele_width; ++k_inner)
+                    {
+
+                            mat1_ptr = mat1 + (i_outer + i_inner)*n + k_outer + k_inner;
+                            __m256 a_vec, b_vec;//, b_vec2, b_vec3, b_vec4;
+                            __m256 dst2 = _mm256_load_ps(dst_ptr + j_inner);
+
+                            mat2_ptr  = mat2 + (j_outer + j_inner + 0)*n + k_outer;
+                            for (int j_inner = 0; j_inner < block_ele_width; j_inner += simd_ele_width)
+                            {
+                                a_vec = _mm256_broadcast_ss( mat1_ptr + k_inner );
+                                b_vec = _mm256_load_ps( mat2_ptr + j_inner );
+                                dst2 = _mm256_fmadd_ps(a_vec, b_vec, dst2);
+                            }
+
+                            _mm256_store_ps(dst_ptr, dst2);
+                    }
+                    */
+                //}
+            }
+        }
+    }
+    return NULL;
+}
+
+void* simd_gemm_worker(void *argv)
+{
+    gemmOptns *optns = (gemmOptns*)argv;
+    float *mat1 = optns->mat1;
+    float *mat2 = optns->mat2;
+    float *dst  = optns->dst;
+    int    n    = optns->n;
+    int    th_id = optns->th_id;
+    int    thd_loop_sz = n / NUM_THREADS;
+    int    start_idx = thd_loop_sz * th_id;
+    int    stop_idx  = start_idx + thd_loop_sz;
+
+    int simd_ele_width  = SIMD_WIDTH  / sizeof(float);
+    int block_ele_width = BLOCK_WIDTH / sizeof(float);
+    int sblock_ele_width = SBLOCK_WIDTH / sizeof(float);
+    int vec_n = n / simd_ele_width;
+    int block_n = sblock_ele_width/block_ele_width;
+
+    float * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict dst_ptr;
+    float * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
+
+    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += sblock_ele_width)
+    {
+        for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_width)
+        {
+            for (int k_outer = 0; k_outer < n; k_outer += sblock_ele_width)
+            {
+                float packed_b[sblock_ele_width*sblock_ele_width] __attribute__ ((__aligned__(64)));
+                float packed_a[sblock_ele_width*sblock_ele_width] __attribute__ ((__aligned__(64)));
+
+                for (int idx = 0; idx < sblock_ele_width; ++idx)
+                {
+                    for (int jdx = 0; jdx < sblock_ele_width; jdx += block_ele_width)
+                    {
+                    memcpy(packed_b + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat2 + (j_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
+                    memcpy(packed_a + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat1 + (i_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
+                    }
+                }
+
+    for (int i_outer2 = 0; i_outer2< sblock_ele_width; i_outer2+= block_ele_width)
+    {
+        for (int j_outer2= 0; j_outer2< sblock_ele_width; j_outer2+= block_ele_width)
+        {
+            for (int k_outer2= 0; k_outer2< sblock_ele_width; k_outer2+= block_ele_width)
+            {
+                for (int i_inner = 0; i_inner < block_ele_width; ++i_inner)
+                {
+                    mat1_ptr = packed_a + (i_outer2*block_n + i_inner)*block_ele_width + k_outer2*block_ele_width;
+                    //_mm_prefetch(mat1_ptr, _MM_HINT_T0);
+
+                    //dst_ptr = dst_tmp + i_inner*block_ele_width; // + (i_outer + i_inner)*n + j_outer;
+                    dst_ptr = dst + (i_outer + i_outer2 + i_inner)*n + j_outer + j_outer2;
                     //_mm_prefetch(dst_ptr, _MM_HINT_T0); 
                     
                     for (int j_inner = 0; j_inner < block_ele_width; j_inner += simd_ele_width)
@@ -100,10 +198,10 @@ void* simd_gemm_worker(void *argv)
                             for (int idx = 0; idx < simd_ele_width; ++idx)
                                 sums[idx] = _mm256_setzero_ps();
 
-                            mat2_ptr  = packed_b + (j_inner + 0)*block_ele_width;
-                            mat2_ptr2 = packed_b + (j_inner + 1)*block_ele_width;
-                            mat2_ptr3 = packed_b + (j_inner + 2)*block_ele_width;
-                            mat2_ptr4 = packed_b + (j_inner + 3)*block_ele_width;
+                            mat2_ptr  = packed_b + (j_inner + j_outer2*block_n + 0)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_n+ 1)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr3 = packed_b + (j_inner + j_outer2*block_n+ 2)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr4 = packed_b + (j_inner + j_outer2*block_n+ 3)*block_ele_width + k_outer2*block_ele_width;
                             for (int k_inner = 0; k_inner < block_ele_width; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
@@ -118,10 +216,10 @@ void* simd_gemm_worker(void *argv)
                             }
 
                             __m256 lower, upper, hsum, shuf;
-                            mat2_ptr  = packed_b + (j_inner + 4)*block_ele_width;
-                            mat2_ptr2 = packed_b + (j_inner + 5)*block_ele_width;
-                            mat2_ptr3 = packed_b + (j_inner + 6)*block_ele_width;
-                            mat2_ptr4 = packed_b + (j_inner + 7)*block_ele_width;
+                            mat2_ptr  = packed_b + (j_inner + j_outer2*block_n + 4)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_n + 5)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr3 = packed_b + (j_inner + j_outer2*block_n + 6)*block_ele_width + k_outer2*block_ele_width;
+                            mat2_ptr4 = packed_b + (j_inner + j_outer2*block_n + 7)*block_ele_width + k_outer2*block_ele_width;
                                 a_vec = _mm256_load_ps( mat1_ptr + 0 );
                                 b_vec = _mm256_load_ps( mat2_ptr + 0 );
                                 sums[4] = _mm256_fmadd_ps(a_vec, b_vec, sums[4]);
@@ -200,7 +298,7 @@ void* simd_gemm_worker(void *argv)
                         dst2 = _mm256_add_ps(dst2, dst_vec);
                         _mm256_store_ps(dst_ptr, dst2);
                         dst_ptr += simd_ele_width;
-                        
+                       }}} 
                     }
                 }
             }
