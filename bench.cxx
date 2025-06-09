@@ -17,13 +17,22 @@ int main(int argv, char **argc)
     std::size_t n_large = n;
 
     float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
-    auto const start = std::chrono::high_resolution_clock::now();
-    cblas_semm(mat1, mat2, dst_cblas, n);
+    std::size_t time_sum_blas =0;
+    for (int idx = 0; idx < 5; ++idx)
+    {
+        for (int idx = 0; idx < n; ++idx)
+            for (int jdx = 0; jdx < n; ++jdx)
+                *(dst_cblas + idx*n + jdx) = 0;
 
-    auto const end = std::chrono::high_resolution_clock::now();
-    std::size_t time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    double gflops = get_gflops(time, 2*n_large*n_large*n_large);
-    printf("OpenBLAS time: %lfs, gflops: %f\n", time*1.0/US_PER_S, gflops);
+        auto const start = std::chrono::high_resolution_clock::now();
+        cblas_semm(mat1, mat2, dst_cblas, n);
+
+        auto const end = std::chrono::high_resolution_clock::now();
+        time_sum_blas += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    }
+    double gflops = get_gflops(time_sum_blas, 5*2*n_large*n_large*n_large);
+    printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas/5.0/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
     float *dst = (float*)aligned_alloc(64, 8 * sizeof(float) * n * n);
