@@ -129,7 +129,7 @@ void* simd_gemm_worker(void *argv)
                             __m256 dst2; // = _mm256_setzero_ps();
 
                             __m256 sums[8] = {};
-                            __m256 sums2[8] = {};
+                            //__m256 sums2[8] = {};
                             //for (int idx = 0; idx < simd_ele_width; ++idx)
                             //    sums[idx] = _mm256_setzero_ps();
 
@@ -171,38 +171,52 @@ void* simd_gemm_worker(void *argv)
                             lower = _mm256_permute2f128_ps(sums[0], sums[1], 0x20);
                             upper = _mm256_permute2f128_ps(sums[0], sums[1], 0x31);
                             sums[0]  = _mm256_add_ps(lower, upper);
-                            sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
-                                   sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                                   sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
-                                   sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            dst2 = _mm256_blend_ps(dst2, sums[0], 0x21);
-
                             lower = _mm256_permute2f128_ps(sums[2], sums[3], 0x20);
-                            upper = _mm256_permute2f128_ps(sums[2], sums[3], 0x31);
-                            sums[0]  = _mm256_add_ps(lower, upper);
                             sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums[0], 0x84);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2 = _mm256_blend_ps(dst2, sums[0], 0x21);
+
+                            upper = _mm256_permute2f128_ps(sums[2], sums[3], 0x31);
+                            sums[2]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_blend_ps(sums[0], sums[2], 0xCC);
+                            sums[3]  = _mm256_permute_ps(sums[2], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x84);
+
+                            upper = _mm256_blend_ps(sums[1], sums[3], 0xCC);
+                            lower = _mm256_add_ps(lower, upper);
+                            upper = _mm256_permute_ps(lower, 0xB1);
+                            lower = _mm256_add_ps(lower, upper);
+                            dst2  = _mm256_blend_ps(dst2, lower, 0xA5);
 
                             lower = _mm256_permute2f128_ps(sums[4], sums[5], 0x20);
                             upper = _mm256_permute2f128_ps(sums[4], sums[5], 0x31);
                             sums[0]  = _mm256_add_ps(lower, upper);
                             lower = _mm256_permute2f128_ps(sums[6], sums[7], 0x20);
-                            upper = _mm256_permute2f128_ps(sums[6], sums[7], 0x31);
                             sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums[0], 0x12);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x12);
 
-                            sums[0]  = _mm256_add_ps(lower, upper);
-                            sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
-                            sums[0]  = _mm256_add_ps(sums[0], sums[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums[0], 0x48);
+                            upper = _mm256_permute2f128_ps(sums[6], sums[7], 0x31);
+                            sums[2]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_blend_ps(sums[0], sums[2], 0xCC);
+                            sums[3]  = _mm256_permute_ps(sums[2], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x48);
+
+                            upper = _mm256_blend_ps(sums[1], sums[3], 0xCC);
+                            lower = _mm256_add_ps(lower, upper);
+                            upper = _mm256_permute_ps(lower, 0xB1);
+                            lower = _mm256_add_ps(lower, upper);
+                            dst2  = _mm256_blend_ps(dst2, lower, 0x5A);
 
                             lower = _mm256_permute2f128_ps(dst2, dst2, 0x21);
                             dst2 = _mm256_blend_ps(dst2, lower, 0xAA);
@@ -220,26 +234,34 @@ void* simd_gemm_worker(void *argv)
                             mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk+ 9)*block_ele_k + k_outer2*block_ele_j;
                             mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk+ 10)*block_ele_k + k_outer2*block_ele_j;
                             mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk+ 11)*block_ele_k + k_outer2*block_ele_j;
+                            sums[0] = _mm256_setzero_ps();
+                            sums[1] = _mm256_setzero_ps();
+                            sums[2] = _mm256_setzero_ps();
+                            sums[3] = _mm256_setzero_ps();
+                            sums[4] = _mm256_setzero_ps();
+                            sums[5] = _mm256_setzero_ps();
+                            sums[6] = _mm256_setzero_ps();
+                            sums[7] = _mm256_setzero_ps();
                                 a_vec = _mm256_load_ps( mat1_ptr );
                                 b_vec = _mm256_load_ps( mat2_ptr );
-                                sums2[0] = _mm256_fmadd_ps(a_vec, b_vec, sums2[0]);
+                                sums[0] = _mm256_fmadd_ps(a_vec, b_vec, sums[0]);
                                 b_vec2 = _mm256_load_ps( mat2_ptr2 );
-                                sums2[1] = _mm256_fmadd_ps(a_vec, b_vec2, sums2[1]);
+                                sums[1] = _mm256_fmadd_ps(a_vec, b_vec2, sums[1]);
                                 b_vec3 = _mm256_load_ps( mat2_ptr3 );
-                                sums2[2] = _mm256_fmadd_ps(a_vec, b_vec3, sums2[2]);
+                                sums[2] = _mm256_fmadd_ps(a_vec, b_vec3, sums[2]);
                                 b_vec4 = _mm256_load_ps( mat2_ptr4 );
-                                sums2[3] = _mm256_fmadd_ps(a_vec, b_vec4, sums2[3]);
+                                sums[3] = _mm256_fmadd_ps(a_vec, b_vec4, sums[3]);
                             for (int k_inner = simd_ele_width; k_inner < block_ele_k; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2[0] = _mm256_fmadd_ps(a_vec, b_vec, sums2[0]);
+                                sums[0] = _mm256_fmadd_ps(a_vec, b_vec, sums[0]);
                                 b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
-                                sums2[1] = _mm256_fmadd_ps(a_vec, b_vec2, sums2[1]);
+                                sums[1] = _mm256_fmadd_ps(a_vec, b_vec2, sums[1]);
                                 b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
-                                sums2[2] = _mm256_fmadd_ps(a_vec, b_vec3, sums2[2]);
+                                sums[2] = _mm256_fmadd_ps(a_vec, b_vec3, sums[2]);
                                 b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
-                                sums2[3] = _mm256_fmadd_ps(a_vec, b_vec4, sums2[3]);
+                                sums[3] = _mm256_fmadd_ps(a_vec, b_vec4, sums[3]);
                             }
 
                             mat2_ptr  = packed_b + (j_inner + j_outer2*block_nk + 12)*block_ele_k + k_outer2*block_ele_j;
@@ -250,59 +272,73 @@ void* simd_gemm_worker(void *argv)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2[4] = _mm256_fmadd_ps(a_vec, b_vec, sums2[4]);
+                                sums[4] = _mm256_fmadd_ps(a_vec, b_vec, sums[4]);
                                 b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
-                                sums2[5] = _mm256_fmadd_ps(a_vec, b_vec2, sums2[5]);
+                                sums[5] = _mm256_fmadd_ps(a_vec, b_vec2, sums[5]);
                                 b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
-                                sums2[6] = _mm256_fmadd_ps(a_vec, b_vec3, sums2[6]);
+                                sums[6] = _mm256_fmadd_ps(a_vec, b_vec3, sums[6]);
                                 b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
-                                sums2[7] = _mm256_fmadd_ps(a_vec, b_vec4, sums2[7]);
+                                sums[7] = _mm256_fmadd_ps(a_vec, b_vec4, sums[7]);
                             }
 
                             //__m256 lower, upper;
-                            lower = _mm256_permute2f128_ps(sums2[0], sums2[1], 0x20);
-                            upper = _mm256_permute2f128_ps(sums2[0], sums2[1], 0x31);
-                            sums2[0]  = _mm256_add_ps(lower, upper);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0x1B);
-                                   sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                                   sums2[1]  = _mm256_permute_ps(sums2[0], 0xB1);
-                                   sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            dst2 = _mm256_blend_ps(dst2, sums2[0], 0x21);
+                            lower = _mm256_permute2f128_ps(sums[0], sums[1], 0x20);
+                            upper = _mm256_permute2f128_ps(sums[0], sums[1], 0x31);
+                            sums[0]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_permute2f128_ps(sums[2], sums[3], 0x20);
+                            sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2 = _mm256_blend_ps(dst2, sums[0], 0x21);
                             
-                            lower = _mm256_permute2f128_ps(sums2[2], sums2[3], 0x20);
-                            upper = _mm256_permute2f128_ps(sums2[2], sums2[3], 0x31);
-                            sums2[0]  = _mm256_add_ps(lower, upper);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0x1B);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0xB1);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums2[0], 0x84);
+                            upper = _mm256_permute2f128_ps(sums[2], sums[3], 0x31);
+                            sums[2]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_blend_ps(sums[0], sums[2], 0xCC);
+                            sums[3]  = _mm256_permute_ps(sums[2], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x84);
 
-                            lower = _mm256_permute2f128_ps(sums2[4], sums2[5], 0x20);
-                            upper = _mm256_permute2f128_ps(sums2[4], sums2[5], 0x31);
-                            sums2[0]  = _mm256_add_ps(lower, upper);
-                            lower = _mm256_permute2f128_ps(sums2[6], sums2[7], 0x20);
-                            upper = _mm256_permute2f128_ps(sums2[6], sums2[7], 0x31);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0x1B);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0xB1);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums2[0], 0x12);
+                            upper = _mm256_blend_ps(sums[1], sums[3], 0xCC);
+                            lower = _mm256_add_ps(lower, upper);
+                            upper = _mm256_permute_ps(lower, 0xB1);
+                            lower = _mm256_add_ps(lower, upper);
+                            dst2  = _mm256_blend_ps(dst2, lower, 0xA5);
 
-                            sums2[0]  = _mm256_add_ps(lower, upper);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0x1B);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            sums2[1]  = _mm256_permute_ps(sums2[0], 0xB1);
-                            sums2[0]  = _mm256_add_ps(sums2[0], sums2[1]);
-                            dst2  = _mm256_blend_ps(dst2, sums2[0], 0x48);
+                            lower = _mm256_permute2f128_ps(sums[4], sums[5], 0x20);
+                            upper = _mm256_permute2f128_ps(sums[4], sums[5], 0x31);
+                            sums[0]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_permute2f128_ps(sums[6], sums[7], 0x20);
+                            sums[1]  = _mm256_permute_ps(sums[0], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x12);
+
+                            upper = _mm256_permute2f128_ps(sums[6], sums[7], 0x31);
+                            sums[2]  = _mm256_add_ps(lower, upper);
+                            lower = _mm256_blend_ps(sums[0], sums[2], 0xCC);
+                            sums[3]  = _mm256_permute_ps(sums[2], 0x1B);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //sums[1]  = _mm256_permute_ps(sums[0], 0xB1);
+                            //sums[0]  = _mm256_add_ps(sums[0], sums[1]);
+                            //dst2  = _mm256_blend_ps(dst2, sums[0], 0x48);
+
+                            upper = _mm256_blend_ps(sums[1], sums[3], 0xCC);
+                            lower = _mm256_add_ps(lower, upper);
+                            upper = _mm256_permute_ps(lower, 0xB1);
+                            lower = _mm256_add_ps(lower, upper);
+                            dst2  = _mm256_blend_ps(dst2, lower, 0x5A);
 
                             lower = _mm256_permute2f128_ps(dst2, dst2, 0x21);
                             dst2 = _mm256_blend_ps(dst2, lower, 0xAA);
                             lower = _mm256_permute_ps(dst2, 0xB1);
                             dst2 = _mm256_blend_ps(dst2, lower, 0xF0);
 
-                        //__m256 sums2 = _mm256_load_ps(temp); 
-                        //__m256 sums2 = _mm256_setzero_ps(); 
+                        //__m256 sums = _mm256_load_ps(temp); 
+                        //__m256 sums = _mm256_setzero_ps(); 
                         upper = _mm256_load_ps(dst_ptr);
                         dst2 = _mm256_add_ps(dst2, upper);
                         _mm256_store_ps(dst_ptr, dst2);
