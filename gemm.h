@@ -89,40 +89,57 @@ void* simd_gemm_worker(void *argv)
                 float packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
                 float packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
 
+                mat1_ptr = mat1 + (i_outer)*n + k_outer;
                 for (int idx = 0; idx < sblock_ele_i; ++idx)
                 {
-                    mat1_ptr = mat1 + (i_outer + idx)*n + k_outer;
+                    mat2_ptr = packed_a + (idx%block_ele_i) * block_ele_k + (idx/block_ele_i)*block_ele_i*block_ele_k*block_nk;
                     for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
                     {
                     //memcpy(packed_b + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat2 + (j_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
-                    memcpy(packed_a + jdx*block_ele_i + (idx%block_ele_i) * block_ele_k + (idx/block_ele_i)*block_ele_i*block_ele_k*block_nk, mat1_ptr + jdx, BLOCK_K);
+                    memcpy(mat2_ptr, mat1_ptr + jdx, BLOCK_K);
+                    mat2_ptr += block_ele_k*block_ele_i;
                     }
+                    mat1_ptr += n;
                 }
+
+                mat2_ptr = mat2 + (j_outer)*n + k_outer;
                 for (int idx = 0; idx < sblock_ele_j; ++idx)
                 {
-                    mat2_ptr = mat2 + (j_outer + idx)*n + k_outer;
+                    mat1_ptr = packed_b + (idx%block_ele_j) * block_ele_k + (idx/block_ele_j)*block_ele_k*block_ele_j*block_nk;
                     for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
                     {
-                    memcpy(packed_b + jdx*block_ele_j+ (idx%block_ele_j) * block_ele_k + (idx/block_ele_j)*block_ele_k*block_ele_j*block_nk, mat2_ptr + jdx, BLOCK_K);
+                    memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_K);
                     //memcpy(packed_a + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat1 + (i_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
+                    mat1_ptr += block_ele_k*block_ele_j;
                     }
+                    mat2_ptr += n;
                 }
 
     for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
     {
         for (int j_outer2= 0; j_outer2< sblock_ele_j; j_outer2 += block_ele_j)
         {
+#if 0        
+            float packed_dst[block_ele_i*block_ele_j];
+            for (int idx = 0; idx < block_ele_i; ++idx)
+            {
+                dst_ptr = dst + (i_outer + i_outer2+ idx)*n + j_outer + j_outer2;
+                memcpy(packed_dst + idx*block_ele_j, dst_ptr, BLOCK_J);
+            }
+#endif            
             for (int k_outer2= 0; k_outer2< sblock_ele_k; k_outer2 += block_ele_k)
             {
                 for (int i_inner = 0; i_inner < block_ele_i; i_inner += 2)
                 {
                     mat1_ptr = packed_a + (i_outer2*block_nk + i_inner)*block_ele_k + k_outer2*block_ele_i;
-                    mat1_ptr2 = packed_a + (i_outer2*block_nk + i_inner + 1)*block_ele_k + k_outer2*block_ele_i;
+                    mat1_ptr2 = mat1_ptr + block_ele_k;
                     //_mm_prefetch(mat1_ptr, _MM_HINT_T0);
 
                     //dst_ptr = dst_tmp + i_inner*block_ele_width; // + (i_outer + i_inner)*n + j_outer;
                     dst_ptr = dst + (i_outer + i_outer2 + i_inner)*n + j_outer + j_outer2;
-                    dst_ptr2 = dst + (i_outer + i_outer2 + i_inner+1)*n + j_outer + j_outer2;
+                    //dst_ptr = packed_dst + i_inner*block_ele_j;
+                    dst_ptr2 = dst_ptr + n;
+                    //dst_ptr2 = dst_ptr + block_ele_j;
                     //_mm_prefetch(dst_ptr, _MM_HINT_T0); 
                     
                     for (int j_inner = 0; j_inner < block_ele_j; j_inner += simd_ele_width)
@@ -153,110 +170,116 @@ void* simd_gemm_worker(void *argv)
                             //    sums[idx] = _mm256_setzero_ps();
 
                             mat2_ptr  = packed_b + (j_inner + j_outer2*block_nk + 0)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk+ 1)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk + 4)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk + 5)*block_ele_k + k_outer2*block_ele_j;
+                            mat2_ptr2 = mat2_ptr + block_ele_k;
+                            mat2_ptr3 = mat2_ptr2 + block_ele_k;
+                            mat2_ptr4 = mat2_ptr3 + block_ele_k;
+                            //mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk + 2)*block_ele_k + k_outer2*block_ele_j;
+                            //mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk + 3)*block_ele_k + k_outer2*block_ele_j;
                             for (int k_inner = 0; k_inner < block_ele_k; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 a_vec2 = _mm256_load_ps( mat1_ptr2 + k_inner );
 
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
+                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
+                                b_vec3 = _mm256_load_ps( mat2_ptr3+ k_inner );
+                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
                                 sums0 = _mm256_fmadd_ps(a_vec, b_vec, sums0);
                                 sums20 = _mm256_fmadd_ps(a_vec2, b_vec, sums20);
-                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
+
                                 sums1 = _mm256_fmadd_ps(a_vec, b_vec2, sums1);
                                 sums21 = _mm256_fmadd_ps(a_vec2, b_vec2, sums21);
-                                b_vec3= _mm256_load_ps( mat2_ptr3 + k_inner );
-                                sums4 = _mm256_fmadd_ps(a_vec, b_vec3, sums4);
-                                sums24 = _mm256_fmadd_ps(a_vec2, b_vec3, sums24);
-                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
-                                sums5 = _mm256_fmadd_ps(a_vec, b_vec4, sums5);
-                                sums25 = _mm256_fmadd_ps(a_vec2, b_vec4, sums25);
+
+                                sums2 = _mm256_fmadd_ps(a_vec, b_vec3, sums2);
+                                sums22 = _mm256_fmadd_ps(a_vec2, b_vec3, sums22);
+
+                                sums3 = _mm256_fmadd_ps(a_vec, b_vec4, sums3);
+                                sums23 = _mm256_fmadd_ps(a_vec2, b_vec4, sums23);
                             }
 
-                            __m256 const upper = _mm256_shuffle_ps(sums0, sums1, 0x4E); // 0100 1110
-                            __m256 const lower = _mm256_blend_ps(sums0, sums1, 0xCC);
-                            sums0 = _mm256_add_ps(lower, upper);
+                            __m256 const upper = _mm256_unpacklo_ps(sums0, sums2); // 0100 1110
+                            __m256 const lower = _mm256_unpackhi_ps(sums0, sums2);
+                            __m256 const upper2 = _mm256_unpacklo_ps(sums1, sums3); // 0100 1110
+                            __m256 const lower2 = _mm256_unpackhi_ps(sums1, sums3);
+                            __m256 const upper1 = _mm256_unpacklo_ps(sums20, sums22); // 0100 1110
+                            __m256 const lower1 = _mm256_unpackhi_ps(sums20, sums22);
+                            __m256 const upper12 = _mm256_unpacklo_ps(sums21, sums23); // 0100 1110
+                            __m256 const lower12 = _mm256_unpackhi_ps(sums21, sums23);
+                            __m256 const res4 = _mm256_add_ps(lower, upper);
+                            __m256 const res5 = _mm256_add_ps(lower2, upper2);
+                            __m256 const res14= _mm256_add_ps(lower1, upper1);
+                            __m256 const res15= _mm256_add_ps(lower12, upper12);
 
-                            __m256 const upper2 = _mm256_shuffle_ps(sums4, sums5, 0x4E); // 0100 1110
-                            __m256 const lower2 = _mm256_blend_ps(sums4, sums5, 0xCC);
-                            sums4 = _mm256_add_ps(lower2, upper2);
-
-                            __m256 const upper3 = _mm256_permute2f128_ps(sums0, sums4, 0x21);
-                            __m256 const upper1 = _mm256_shuffle_ps(sums20, sums21, 0x4E); // 0100 1110
-                            __m256 const lower1 = _mm256_blend_ps(sums20, sums21, 0xCC);
-                            sums20 = _mm256_add_ps(lower1, upper1);
-
-                            __m256 const lower3 = _mm256_blend_ps(sums0, sums4, 0xF0);
+                            __m256 const upper3 = _mm256_unpacklo_ps(res4, res5); //_mm256_shuffle_ps(sums0, sums2, 0x4E);
+                            __m256 const lower3 = _mm256_unpackhi_ps(res4, res5); //_mm256_blend_ps(sums0, sums2, 0xCC);
+                            __m256 const upper13 = _mm256_unpacklo_ps(res14, res15); //_mm256_shuffle_ps(sums20, sums22, 0x4E ); // 0100 1110
+                            __m256 const lower13 = _mm256_unpackhi_ps(res14, res15); //_mm256_blend_ps(sums20, sums22, 0xCC ); // 1100 1100
                             dst2 = _mm256_add_ps(lower3, upper3);
-
-                            __m256 const upper12 = _mm256_shuffle_ps(sums24, sums25, 0x4E); // 0100 1110
-                            __m256 const lower12 = _mm256_blend_ps(sums24, sums25, 0xCC);
-                            sums24 = _mm256_add_ps(lower12, upper12);
-
-                            __m256 const upper13 = _mm256_permute2f128_ps(sums20, sums24, 0x21);
-                            __m256 const lower13 = _mm256_blend_ps(sums20, sums24, 0xF0);
                             dst3 = _mm256_add_ps(lower13, upper13);
 
-                            mat2_ptr = packed_b + (j_inner + j_outer2*block_nk+ 2)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk+ 3)*block_ele_k + k_outer2*block_ele_j;
+
+                            mat2_ptr  = packed_b + (j_inner + j_outer2*block_nk + 4)*block_ele_k + k_outer2*block_ele_j;
+                            mat2_ptr2 = mat2_ptr + block_ele_k;
+                            mat2_ptr3 = mat2_ptr2 + block_ele_k;
+                            mat2_ptr4 = mat2_ptr3 + block_ele_k;
+#if 0
+                            mat2_ptr = packed_b + (j_inner + j_outer2*block_nk+ 4)*block_ele_k + k_outer2*block_ele_j;
+                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk+ 5)*block_ele_k + k_outer2*block_ele_j;
                             mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk + 6)*block_ele_k + k_outer2*block_ele_j;
                             mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk + 7)*block_ele_k+ k_outer2*block_ele_j;
+#endif                            
                             for (int k_inner = 0; k_inner < block_ele_k; k_inner += simd_ele_width)
                             {
                                 a_vec = _mm256_load_ps( mat1_ptr + k_inner );
                                 a_vec2 = _mm256_load_ps( mat1_ptr2 + k_inner );
 
                                 b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums2 = _mm256_fmadd_ps(a_vec, b_vec, sums2);
-                                sums22 = _mm256_fmadd_ps(a_vec2, b_vec, sums22);
                                 b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
-                                sums3 = _mm256_fmadd_ps(a_vec, b_vec2, sums3);
-                                sums23 = _mm256_fmadd_ps(a_vec2, b_vec2, sums23);
                                 b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
+                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
+
+                                sums4 = _mm256_fmadd_ps(a_vec, b_vec, sums4);
+                                sums24 = _mm256_fmadd_ps(a_vec2, b_vec, sums24);
+
+                                sums5 = _mm256_fmadd_ps(a_vec, b_vec2, sums5);
+                                sums25 = _mm256_fmadd_ps(a_vec2, b_vec2, sums25);
+
                                 sums6 = _mm256_fmadd_ps(a_vec, b_vec3, sums6);
                                 sums26 = _mm256_fmadd_ps(a_vec2, b_vec3, sums26);
-                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
+
                                 sums7 = _mm256_fmadd_ps(a_vec, b_vec4, sums7);
                                 sums27 = _mm256_fmadd_ps(a_vec2, b_vec4, sums27);
                             }
 
-                            __m256 const upper4 = _mm256_shuffle_ps(sums2, sums3, 0x4E); // 0100 1110
-                            __m256 const lower4 = _mm256_blend_ps(sums2, sums3, 0xCC);
-                            sums2 = _mm256_add_ps(lower4, upper4);
-
-                            __m256 const upper5 = _mm256_shuffle_ps(sums6, sums7, 0x4E); // 0100 1110
-                            __m256 const lower5 = _mm256_blend_ps(sums6, sums7, 0xCC);
-                            sums6 = _mm256_add_ps(lower5, upper5);
-
-                            __m256 const upper6 = _mm256_permute2f128_ps(sums2, sums6, 0x21);
-                            __m256 const upper14 = _mm256_shuffle_ps(sums22, sums23, 0x4E); // 0100 1110
-                            __m256 const lower14 = _mm256_blend_ps(sums22, sums23, 0xCC);
-                            sums22 = _mm256_add_ps(lower14, upper14);
-                            __m256 const lower6 = _mm256_blend_ps(sums2, sums6, 0xF0);
-                            sums2 = _mm256_add_ps(lower6, upper6);
-
-
-                            __m256 const lower7 = _mm256_shuffle_ps(dst2, sums2, 0xDD ); // 1101 1101 => 0xDD
-                            __m256 const upper7 = _mm256_shuffle_ps(dst2, sums2, 0x88); // 1000 1000 => 0x88
-                            dst2 = _mm256_add_ps(lower7, upper7);
-
+                            __m256 const upper4 = _mm256_unpacklo_ps(sums4, sums6); // 0100 1110
+                            __m256 const lower4 = _mm256_unpackhi_ps(sums4, sums6);
+                            __m256 const upper5 = _mm256_unpacklo_ps(sums5, sums7); // 0100 1110
+                            __m256 const lower5 = _mm256_unpackhi_ps(sums5, sums7);
+                            __m256 const upper14 = _mm256_unpacklo_ps(sums24, sums26); // 0100 1110
+                            __m256 const lower14 = _mm256_unpackhi_ps(sums24, sums26);
+                            __m256 const upper15 = _mm256_unpacklo_ps(sums25, sums27); // 0100 1110
+                            __m256 const lower15 = _mm256_unpackhi_ps(sums25, sums27);
+                            __m256 const res1 = _mm256_add_ps(lower4, upper4);
+                            __m256 const res2 = _mm256_add_ps(lower5, upper5);
+                            __m256 const res11 = _mm256_add_ps(lower14, upper14);
+                            __m256 const res12 = _mm256_add_ps(lower15, upper15);
 
 
                         __m256 const upper18 = _mm256_load_ps(dst_ptr2);
-                            __m256 const upper15 = _mm256_shuffle_ps(sums26, sums27, 0x4E); // 0100 1110
-                            __m256 const lower15 = _mm256_blend_ps(sums26, sums27, 0xCC);
-                            sums26 = _mm256_add_ps(lower15, upper15);
+                            __m256 const upper6 =  _mm256_unpacklo_ps(res1, res2); //_mm256_shuffle_ps(sums4, sums6, 0x4E);
+                            __m256 const lower6 = _mm256_unpackhi_ps(res1, res2); //_mm256_blend_ps(sums4, sums6, 0xCC);
+                            __m256 const upper16 = _mm256_unpacklo_ps(res11, res12); //_mm256_shuffle_ps(sums24, sums26, 0x4E);
+                            __m256 const lower16 = _mm256_unpackhi_ps(res11, res12); //_mm256_blend_ps(sums24, sums26, 0xCC);
+                            __m256 const res3 = _mm256_add_ps(lower6, upper6);
+                            __m256 const res13= _mm256_add_ps(lower16, upper16);
 
-                            __m256 const upper16 = _mm256_permute2f128_ps(sums22, sums26, 0x21);
-                            __m256 const lower16 = _mm256_blend_ps(sums22, sums26, 0xF0);
-                            sums22 = _mm256_add_ps(lower16, upper16);
 
-
+                            __m256 const lower17 = _mm256_permute2f128_ps(dst3, res13, 0x21 ); // 1101 1101 => 0xDD
                         __m256 const upper8 = _mm256_load_ps(dst_ptr);
-                            __m256 const lower17 = _mm256_shuffle_ps(dst3, sums22, 0xDD ); // 1101 1101 => 0xDD
-                            __m256 const upper17 = _mm256_shuffle_ps(dst3, sums22, 0x88); // 1000 1000 => 0x88
+                            __m256 const lower7 = _mm256_permute2f128_ps(dst2, res3 , 0x21); // 1101 1101 => 0xDD
+                            __m256 const upper17 = _mm256_blend_ps(dst3, res13, 0xF0); // 1000 1000 => 0x88
+                            __m256 const upper7 = _mm256_blend_ps(dst2, res3, 0xF0); // 1000 1000 => 0x88
+                            dst2 = _mm256_add_ps(lower7, upper7);
                             dst3 = _mm256_add_ps(lower17, upper17);
 
                         //__m256 sums2 = _mm256_load_ps(temp); 
@@ -268,65 +291,14 @@ void* simd_gemm_worker(void *argv)
                         dst_ptr += simd_ele_width;
                         dst_ptr2 += simd_ele_width;
 
-                        //__m256 sums = _mm256_load_ps(temp);
-                        //__m256 sums = _mm256_setzero_ps();
-
-#if 0                            
-                            mat2_ptr  = packed_b + (j_inner + j_outer2*block_nk + 8)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk+ 9)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk+ 10)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk+ 11)*block_ele_k + k_outer2*block_ele_j;
-                            sums0 = _mm256_setzero_ps();
-                            sums1 = _mm256_setzero_ps();
-                            sums2 = _mm256_setzero_ps();
-                            sums3 = _mm256_setzero_ps();
-                            sums4 = _mm256_setzero_ps();
-                            sums5 = _mm256_setzero_ps();
-                            sums6 = _mm256_setzero_ps();
-                            sums7 = _mm256_setzero_ps();
-                                a_vec = _mm256_load_ps( mat1_ptr );
-                                b_vec = _mm256_load_ps( mat2_ptr );
-                                sums20 = _mm256_fmadd_ps(a_vec, b_vec, sums20);
-                                b_vec2 = _mm256_load_ps( mat2_ptr2 );
-                                sums21 = _mm256_fmadd_ps(a_vec, b_vec2, sums21);
-                                b_vec3 = _mm256_load_ps( mat2_ptr3 );
-                                sums22 = _mm256_fmadd_ps(a_vec, b_vec3, sums22);
-                                b_vec4 = _mm256_load_ps( mat2_ptr4 );
-                                sums23 = _mm256_fmadd_ps(a_vec, b_vec4, sums23);
-                            for (int k_inner = simd_ele_width; k_inner < block_ele_k; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums20 = _mm256_fmadd_ps(a_vec, b_vec, sums20);
-                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
-                                sums21 = _mm256_fmadd_ps(a_vec, b_vec2, sums21);
-                                b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
-                                sums22 = _mm256_fmadd_ps(a_vec, b_vec3, sums22);
-                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
-                                sums23 = _mm256_fmadd_ps(a_vec, b_vec4, sums23);
-                            }
-
-                            mat2_ptr  = packed_b + (j_inner + j_outer2*block_nk + 12)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr2 = packed_b + (j_inner + j_outer2*block_nk + 13)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr3 = packed_b + (j_inner + j_outer2*block_nk + 14)*block_ele_k + k_outer2*block_ele_j;
-                            mat2_ptr4 = packed_b + (j_inner + j_outer2*block_nk + 15)*block_ele_k+ k_outer2*block_ele_j;
-                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += simd_ele_width)
-                            {
-                                a_vec = _mm256_load_ps( mat1_ptr + k_inner );
-                                b_vec = _mm256_load_ps( mat2_ptr + k_inner );
-                                sums24 = _mm256_fmadd_ps(a_vec, b_vec, sums24);
-                                b_vec2 = _mm256_load_ps( mat2_ptr2 + k_inner );
-                                sums25 = _mm256_fmadd_ps(a_vec, b_vec2, sums25);
-                                b_vec3 = _mm256_load_ps( mat2_ptr3 + k_inner );
-                                sums26 = _mm256_fmadd_ps(a_vec, b_vec3, sums26);
-                                b_vec4 = _mm256_load_ps( mat2_ptr4 + k_inner );
-                                sums27 = _mm256_fmadd_ps(a_vec, b_vec4, sums27);
-                            }
-#endif                            
-
-                            //__m256 lower, upper;
-
                        }}} 
+#if 0                       
+                for (int idx = 0; idx < block_ele_i; ++idx)
+                {
+                    dst_ptr = dst + (i_outer + i_outer2 + idx)*n + j_outer + j_outer2;
+                    memcpy(dst_ptr, packed_dst + idx*block_ele_j, BLOCK_J);
+                }
+#endif                
                     }
                 }
             }
