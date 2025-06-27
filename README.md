@@ -19,13 +19,13 @@ Metrics are in GFLOPs.
 | CPU | This algorithm | OpenBLAS | Ratio of OpenBLAS |
 |:----|---------------:|---------:|:------------------|
 **Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
-**Tiger Lake** i5-1135G7 | 100 | 122 | 0.82 |
+**Tiger Lake** i5-1135G7 | 105 | 122 | 0.86 |
 
 **4 threads, n=4096, fp32,** average of 5 runs
 
 | CPU | This algorithm | OpenBLAS | Ratio of OpenBLAS |
 |:----|---------------:|---------:|:------------------|
-**Tiger Lake** i5-1135G7 | 355 | 465 | 0.76 |
+**Tiger Lake** i5-1135G7 | 365 | 465 | 0.78 |
 
 # Prerequisites
 

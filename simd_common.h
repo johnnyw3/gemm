@@ -17,9 +17,9 @@
 #define BLOCK_I 64 
 #define BLOCK_J 128 
 #define BLOCK_K 1024
-#define SBLOCK_I 2048 
+#define SBLOCK_I 4096 
 #define SBLOCK_J 2048 
-#define SBLOCK_K 2048
+#define SBLOCK_K 1024 
 
 #else
 // default block sizes (in bytes), optimized for Skylake-sizes caches
