@@ -4,6 +4,7 @@
 
 #ifdef __AVX512F__
 #define SIMD_WIDTH 64 // in bytes -> 512-bit (AVX512)
+#define USE_AVX512
 #elif defined(__AVX2__)
 #define SIMD_WIDTH 32   // in bytes -> 256-bit (AVX2)
 #else
@@ -12,7 +13,7 @@
 #endif
 
 // code optimized for the larger cache sizes on Tiger Lake
-#ifdef __AVX512F__ 
+#ifdef USE_AVX512 
 #define BLOCK_I 64 
 #define BLOCK_J 128 
 #define BLOCK_K 1024
