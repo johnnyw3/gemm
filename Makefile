@@ -4,7 +4,7 @@ TEMP_FNAME=$(shell date +%FT%H:%M:%S)_log.txt
 NUM_THREADS?=$(shell nproc)
 
 TARGET?=skylake
-CXXFLAGS?=-march=$(TARGET) -g -O3 -flto -fsave-optimization-record -DNUM_THREADS=$(NUM_THREADS)
+CXXFLAGS?=-march=$(TARGET) -O3 -flto -g -fsave-optimization-record -DNUM_THREADS=$(NUM_THREADS) -DTARGET=$(TARGET)
 CC=clang++
 
 all: bench

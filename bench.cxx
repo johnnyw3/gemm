@@ -18,7 +18,7 @@ int main(int argv, char **argc)
 
     float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
     std::size_t time_sum_blas =0;
-    for (int idx = 0; idx < 5; ++idx)
+    for (int idx = 0; idx < 10; ++idx)
     {
         for (int idx = 0; idx < n; ++idx)
             for (int jdx = 0; jdx < n; ++jdx)
@@ -31,8 +31,8 @@ int main(int argv, char **argc)
         time_sum_blas += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     }
-    double gflops = get_gflops(time_sum_blas, 5*2*n_large*n_large*n_large);
-    printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas/5.0/US_PER_S, gflops);
+    double gflops = get_gflops(time_sum_blas, 10*2*n_large*n_large*n_large);
+    printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas/10.0/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
     float *dst = (float*)aligned_alloc(64, 8 * sizeof(float) * n * n);
@@ -46,7 +46,7 @@ int main(int argv, char **argc)
     //cpu_transpose(mat1, n);
     //cpu_transpose(dst, n);
 
-    for (int idx = 0; idx < 5; ++idx)
+    for (int idx = 0; idx < 10; ++idx)
     {
         auto const start = std::chrono::high_resolution_clock::now();
         simd_gemm(mat1, mat2, dst, n);
@@ -65,8 +65,8 @@ int main(int argv, char **argc)
 
     printf("\n");
 
-    gflops = get_gflops(time_sum, 5*2*n_large*n_large*n_large);
-    printf("Avg time: %lfs, gflops: %f\n", time_sum/5.0/US_PER_S, gflops);
+    gflops = get_gflops(time_sum, 10*2*n_large*n_large*n_large);
+    printf("Avg time: %lfs, gflops: %f\n", time_sum/10.0/US_PER_S, gflops);
     
     free(mat1);
     free(mat2);

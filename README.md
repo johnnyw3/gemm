@@ -1,31 +1,31 @@
 ## simd
 
 High performance GEMM algorithm written in C using AVX
-intrinsics. Currently achieves 75-80% performance of OpenBLAS (at least on my
-system). 
+intrinsics. Currently achieves 75-85% performance of OpenBLAS (at least on my
+systems). 
 
 Some optimization techniques were inspired by Salykov's article on the topic [2],
-by the algorithm used here is different than the one described in the article.
-On my system, I can achieve comparable performance to Salykov's code.
+but the algorithm used here is different than the one described in the article.
+On my systems, I can achieve comparable performance to Salykov's code.
 
 # Benchmarks
 
 (I know, fight me for testing on mobile CPUs)
 
-Metrics are in GFLOPs.
+Metrics are in GFLOPs; speedups are compared to OpenBLAS.
 
-**Single-threaded, n=4096, fp32,** average of 5 runs
+**Single-threaded, n=4096, fp32,** average of 10 runs
 
-| CPU | This algorithm | OpenBLAS | Ratio of OpenBLAS |
+| CPU | This algorithm | OpenBLAS | Speedup |
 |:----|---------------:|---------:|:------------------|
 **Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
-**Tiger Lake** i5-1135G7 | 105 | 122 | 0.86 |
+**Tiger Lake** i5-1135G7 | 106 | 122 | 0.87 |
 
-**4 threads, n=4096, fp32,** average of 5 runs
+**4 threads, n=4096, fp32,** average of 10 runs
 
-| CPU | This algorithm | OpenBLAS | Ratio of OpenBLAS |
+| CPU | This algorithm | OpenBLAS | Speedup |
 |:----|---------------:|---------:|:------------------|
-**Tiger Lake** i5-1135G7 | 365 | 465 | 0.78 |
+**Tiger Lake** i5-1135G7 | 367 | 465 | 0.79 |
 
 # Prerequisites
 
