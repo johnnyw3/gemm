@@ -1,4 +1,4 @@
-## simd
+# GEMM 
 
 High performance GEMM algorithm written in C using AVX
 intrinsics. Currently achieves 75-85% performance of OpenBLAS (at least on my

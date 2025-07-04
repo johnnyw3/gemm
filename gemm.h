@@ -85,29 +85,40 @@ void* simd_gemm_worker(void *argv)
                 float packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
 
                 mat1_ptr = mat1 + (i_outer)*n + k_outer;
-                for (int idx = 0; idx < sblock_ele_i; ++idx)
+                mat2_ptr = packed_a;
+                for (int idx = 0; idx < sblock_ele_i;)
                 {
-                    mat2_ptr = packed_a + (idx%block_ele_i) * block_ele_k + (idx/block_ele_i)*block_ele_i*block_ele_k*block_nk;
                     for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
                     {
-                    //memcpy(packed_b + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat2 + (j_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
                     memcpy(mat2_ptr, mat1_ptr + jdx, BLOCK_K);
                     mat2_ptr += block_ele_k*block_ele_i;
                     }
                     mat1_ptr += n;
+
+                    ++idx;
+                    if (! (idx%block_ele_i) )
+                        mat2_ptr -= block_ele_k*block_ele_i - block_ele_k;
+                    else
+                        mat2_ptr -= block_ele_k*(block_ele_i)*block_nk - block_ele_k;
                 }
 
                 mat2_ptr = mat2 + (j_outer)*n + k_outer;
-                for (int idx = 0; idx < sblock_ele_j; ++idx)
+                mat1_ptr = packed_b;
+
+                for (int idx = 0; idx < sblock_ele_j;)
                 {
-                    mat1_ptr = packed_b + (idx%block_ele_j) * block_ele_k + (idx/block_ele_j)*block_ele_k*block_ele_j*block_nk;
                     for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
                     {
                     memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_K);
-                    //memcpy(packed_a + jdx*block_ele_width + (idx%block_ele_width) * block_ele_width + (idx/block_ele_width)*block_ele_width*block_ele_width*block_n, mat1 + (i_outer + idx)*n + jdx + k_outer, BLOCK_WIDTH);
                     mat1_ptr += block_ele_k*block_ele_j;
                     }
                     mat2_ptr += n;
+                    ++idx;
+
+                    if (! (idx%block_ele_j) )
+                        mat1_ptr -= block_ele_k*block_ele_j - block_ele_k;
+                    else
+                        mat1_ptr -= block_ele_k*(block_ele_j)*block_nk - block_ele_k;
                 }
 
     for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
@@ -318,9 +329,12 @@ void* simd_gemm_worker_avx512(void *argv)
                 mat1_ptr += n;
 
                 ++idx;
-                mat2_ptr -= block_ele_k*(block_ele_i-1);
+#if BLOCK_K != SBLOCK_K
                 if (! (idx%block_ele_i) )
-                    mat2_ptr += block_ele_k*block_ele_i*(block_nk-1);
+                    mat2_ptr -= block_ele_k*block_ele_i - block_ele_k;
+                else
+#endif
+                    mat2_ptr -= block_ele_k*(block_ele_i)*block_nk - block_ele_k;
             }
             for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_j)
             {
@@ -339,9 +353,12 @@ void* simd_gemm_worker_avx512(void *argv)
                     mat2_ptr += n;
                     ++idx;
 
-                    mat1_ptr -= block_ele_k*(block_ele_j-1);
+#if BLOCK_K != SBLOCK_K
                     if (! (idx%block_ele_j) )
-                        mat1_ptr += block_ele_k*block_ele_j*(block_nk-1);
+                        mat1_ptr -= block_ele_k*block_ele_j - block_ele_k;
+                    else
+#endif
+                        mat1_ptr -= block_ele_k*(block_ele_j)*block_nk - block_ele_k;
                 }
 
     for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
