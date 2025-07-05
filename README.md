@@ -1,7 +1,7 @@
 # GEMM 
 
 High performance GEMM algorithm written in C using AVX
-intrinsics. Currently achieves 75-85% performance of OpenBLAS (at least on my
+intrinsics. Currently achieves ~80% performance of OpenBLAS (at least on my
 systems). 
 
 Some optimization techniques were inspired by Salykov's article on the topic [2],
@@ -25,6 +25,7 @@ Metrics are in GFLOPs; speedups are compared to OpenBLAS.
 
 | CPU | This algorithm | OpenBLAS | Speedup |
 |:----|---------------:|---------:|:------------------|
+**Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
 **Tiger Lake** i5-1135G7 | 367 | 465 | 0.79 |
 
 # Prerequisites
@@ -70,3 +71,5 @@ You'll need to `make clean` first before changing configurations.
 [1] U. Drepper, “What Every Programmer Should Know About Memory,” Nov. 2007, [Online]. Available: https://people.freebsd.org/~lstewart/articles/cpumemory.pdf
 
 [2] A. Salykov, “Advanced Matrix Multiplication Optimization on Modern Multi-Core Processors,” salykova. Accessed: Jun. 20, 2025. [Online]. Available: https://salykova.github.io/matmul-cpu
+
+[3] “Intel Advanced Vector Extensions 512  (Intel AVX-512) - Permuting Data Within  and Between AVX Registers,” Intel. Accessed: Jun. 19, 2025. [Online]. Available: https://builders.intel.com/docs/networkbuilders/intel-avx-512-permuting-data-within-and-between-avx-registers-technology-guide-1668169807.pdf
