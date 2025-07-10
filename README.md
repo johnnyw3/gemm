@@ -26,7 +26,7 @@ Metrics are in GFLOPs; speedups are compared to OpenBLAS.
 | CPU | This algorithm | OpenBLAS | Speedup |
 |:----|---------------:|---------:|:------------------|
 **Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
-**Tiger Lake** i5-1135G7 | 367 | 465 | 0.79 |
+**Tiger Lake** i5-1135G7 | 380 | 465 | 0.82 |
 
 # Prerequisites
 

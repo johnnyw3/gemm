@@ -16,7 +16,11 @@
 #ifdef USE_AVX512 
 #define BLOCK_I 64 
 #define BLOCK_J 128 
+#if NUM_THREADS == 1
 #define BLOCK_K 1024
+#else
+#define BLOCK_K 512
+#endif
 #define SBLOCK_I 4096 
 #define SBLOCK_J 2048 
 #define SBLOCK_K 1024 

@@ -35,7 +35,7 @@ int main(int argv, char **argc)
     printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas/10.0/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
-    float *dst = (float*)aligned_alloc(64, 8 * sizeof(float) * n * n);
+    float *dst = (float*)aligned_alloc(64, sizeof(float) * n * n);
     for (int idx = 0; idx < n; ++idx)
         for (int jdx = 0; jdx < n; ++jdx)
             *(dst + idx*n + jdx) = 0;
