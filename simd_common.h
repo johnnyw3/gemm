@@ -2,7 +2,10 @@
 #define __SIMD_COMMON_H__
 #include <x86intrin.h>
 
-#ifdef __AVX512F__
+#ifdef __AMX_TILE__
+#define USE_AMX
+#define SIMD_WIDTH 64
+#elif defined(__AVX512F__)
 #define SIMD_WIDTH 64 // in bytes -> 512-bit (AVX512)
 #define USE_AVX512
 #elif defined(__AVX2__)
@@ -10,20 +13,32 @@
 #else
 // NOTE: AVX (original) support not yet implemented
 #define SIMD_WIDTH 16   // in bytes -> 128-bit (original AVX)
+#error "Original (128-bit) AVX support not implemented."
 #endif
 
 // code optimized for the larger cache sizes on Tiger Lake
-#ifdef USE_AVX512 
-#define BLOCK_I 64 
-#define BLOCK_J 128 
+#ifdef USE_AMX
+#define BLOCK_I 64
+#define BLOCK_J 128
 #if NUM_THREADS == 1
 #define BLOCK_K 1024
 #else
 #define BLOCK_K 512
 #endif
-#define SBLOCK_I 4096 
-#define SBLOCK_J 2048 
-#define SBLOCK_K 1024 
+#define SBLOCK_I 4096
+#define SBLOCK_J 2048
+#define SBLOCK_K 1024
+#elif defined(USE_AVX512)
+#define BLOCK_I 64
+#define BLOCK_J 128
+#if NUM_THREADS == 1
+#define BLOCK_K 1024
+#else
+#define BLOCK_K 512
+#endif
+#define SBLOCK_I 4096
+#define SBLOCK_J 2048
+#define SBLOCK_K 1024
 
 #else
 // default block sizes (in bytes), optimized for Skylake-sizes caches

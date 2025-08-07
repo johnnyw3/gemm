@@ -32,7 +32,7 @@ Metrics are in GFLOPs; speedups are compared to OpenBLAS.
 
 ## Hardware
 
-A modern x86 processor supporting AVX2 or AVX-512 must be used.
+A modern x86 processor supporting AVX2, AVX-512, or AMX must be used.
 
 ## Software
 
@@ -40,6 +40,8 @@ For the library:
 
 * `pthreads` support (for multithreading)
 * A version of `make` that supports the `shell` directive
+* A modern C++ compiler. For AMX support, `clang` version 16+ or `gcc` version
+  13+ must be used as these compilers support the `__bf16` type.
 
 For the `bench` program:
 

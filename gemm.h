@@ -7,33 +7,57 @@
 #define US_PER_S 1000000
 #define GIGA     1000000000
 
-template<typename T>
-void simd_gemm(T *mat1, T *mat2, T *dst, int n);
 void* simd_gemm_worker(void *argv);
 void* simd_gemm_worker_avx512(void *argv);
+void* simd_gemm_worker_amx(void *argv);
 
-inline void gemm_inner(float *mat1_ptr, float *mat2_ptr, float *dst_ptr, int simd_ele_width, int block_ele_width);
-inline void gemm_inner(double *mat1_ptr, double *mat2_ptr, double *dst_ptr, int simd_ele_width, int block_ele_width);
-void cpu_transpose(float *mat, int n);
-
+#ifdef USE_AMX
 typedef struct{
-    float *mat1;
-    float *mat2;
+    uint8_t  palette;
+    uint8_t  _resvd[15];
+    uint16_t tile_cols[8];
+    uint16_t _resvd2[8];
+    uint8_t  tile_rows[8];
+    uint8_t  _resvd3[8];
+} amx_tilecfg_t;
+#endif // USE_AMX
+
+template <typename T>
+struct gemmOptns {
+    T     *mat1;
+    T     *mat2;
     float *dst;
     int    n;
     int    th_id;
-} gemmOptns;
+};
 
-void simd_gemm(float * __restrict mat1, float * __restrict mat2, float * __restrict dst, int n)
+template<typename T>
+void cpu_transpose(T *mat, int n)
 {
-    gemmOptns thd_optns[NUM_THREADS];
+    for (int idx_y = 0; idx_y < n; ++idx_y)
+    {
+        for (int idx_x = idx_y+1; idx_x < n; ++idx_x)
+        {
+            T temp_upper = *(mat + idx_y*n + idx_x);
+            *(mat + idx_y*n + idx_x) = *(mat + idx_x*n + idx_y);
+            *(mat + idx_x*n + idx_y) = temp_upper;
+        }
+    }
+}
+
+template<typename T>
+void simd_gemm(T * __restrict mat1, T * __restrict mat2, float * __restrict dst, int n)
+{
+    gemmOptns<T> thd_optns[NUM_THREADS];
     pthread_t thds[NUM_THREADS];
 
     for (int th_id = 0; th_id < NUM_THREADS; ++th_id)
     {
-        gemmOptns optn =  {mat1, mat2, dst, n, th_id};
+        gemmOptns<T> optn =  {mat1, mat2, dst, n, th_id};
         thd_optns[th_id] = optn;
-#ifdef USE_AVX512
+#ifdef USE_MX
+        pthread_create(&thds[th_id], NULL, &simd_gemm_worker_amx, (void*)&thd_optns[th_id]);
+#elif defined(USE_AVX512)
         pthread_create(&thds[th_id], NULL, &simd_gemm_worker_avx512, (void*)&thd_optns[th_id]);
 #else 
         pthread_create(&thds[th_id], NULL, &simd_gemm_worker, (void*)&thd_optns[th_id]);
@@ -49,7 +73,7 @@ void simd_gemm(float * __restrict mat1, float * __restrict mat2, float * __restr
 
 void* simd_gemm_worker(void *argv)
 {
-    gemmOptns *optns = (gemmOptns*)argv;
+    gemmOptns<float> *optns = (gemmOptns<float>*)argv;
     float * const mat1 = optns->mat1;
     float * const mat2 = optns->mat2;
     float * const dst  = optns->dst;
@@ -285,7 +309,7 @@ void* simd_gemm_worker(void *argv)
 #ifdef USE_AVX512
 void* simd_gemm_worker_avx512(void *argv)
 {
-    gemmOptns *optns = (gemmOptns*)argv;
+    gemmOptns<float> *optns = (gemmOptns<float>*)argv;
     float * const mat1 = optns->mat1;
     float * const mat2 = optns->mat2;
     float * const dst  = optns->dst;
@@ -648,5 +672,141 @@ void* simd_gemm_worker_avx512(void *argv)
     return NULL;
 }
 #endif // USE_AVX512
+
+#ifdef USE_AMX
+void* simd_gemm_worker_amx(void *argv)
+{
+    gemmOptns<__bf16> *optns = (gemmOptns<__bf16>*)argv;
+    __bf16 * const mat1 = optns->mat1;
+    __bf16 * const mat2 = optns->mat2;
+    float  * const dst  = optns->dst;
+    const int    n    = optns->n;
+    const int    th_id = optns->th_id;
+    const int    thd_loop_sz = n / NUM_THREADS;
+    const int    start_idx = thd_loop_sz * th_id;
+    const int    stop_idx  = start_idx + thd_loop_sz;
+
+    constexpr int simd_ele_width  = SIMD_WIDTH  / sizeof(__bf16);
+    constexpr int block_ele_i = BLOCK_I / sizeof(__bf16);
+    constexpr int block_ele_j = BLOCK_J / sizeof(__bf16);
+    constexpr int block_ele_k = BLOCK_K / sizeof(__bf16);
+    constexpr int sblock_ele_i = SBLOCK_I / sizeof(__bf16);
+    constexpr int sblock_ele_j = SBLOCK_J / sizeof(__bf16);
+    constexpr int sblock_ele_k = SBLOCK_K / sizeof(__bf16);
+    //int vec_n = n / simd_ele_width;
+    constexpr int block_ni = sblock_ele_i/block_ele_i;
+    constexpr int block_nj = sblock_ele_j/block_ele_j;
+    constexpr int block_nk = sblock_ele_k/block_ele_k;
+
+    __bf16 * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict mat1_ptr2;
+    __bf16 * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
+    float  * __restrict dst_ptr, * __restrict dst_ptr2;
+
+    amx_tilecfg_t tilecfg = {0};
+    tilecfg.palette = 1;
+
+    // configuraiton for dst tiles
+    for (int idx = 0; idx < 1; ++idx)
+    {
+        tilecfg.tile_cols[idx] = 16;
+        tilecfg.tile_rows[idx] = 16;
+    }
+
+    // configuration for mat1/mat2 tiles
+    for (int idx = 1; idx < 4; ++idx)
+    {
+        tilecfg.tile_cols[idx] = 16;
+        tilecfg.tile_rows[idx] = 16;
+    }
+
+    _tile_loadconfig(&tilecfg);
+
+    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += sblock_ele_i)
+    {
+        for (int k_outer = 0; k_outer < n; k_outer += sblock_ele_k)
+        {
+            __bf16 packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
+
+            mat1_ptr = mat1 + (i_outer)*n + k_outer;
+            mat2_ptr = packed_a;
+            for (int idx = 0; idx < sblock_ele_i;)
+            {
+                for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
+                {
+                    memcpy(mat2_ptr, mat1_ptr + jdx, BLOCK_K);
+                    mat2_ptr += block_ele_k*block_ele_i;
+                }
+                mat1_ptr += n;
+
+                ++idx;
+#if BLOCK_K != SBLOCK_K
+                if (! (idx%block_ele_i) )
+                    mat2_ptr -= block_ele_k*block_ele_i - block_ele_k;
+                else
+#endif
+                    mat2_ptr -= block_ele_k*(block_ele_i)*block_nk - block_ele_k;
+            }
+            for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_j)
+            {
+                __bf16 packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
+
+                mat2_ptr = mat2 + (j_outer)*n + k_outer;
+                mat1_ptr = packed_b;
+
+                for (int idx = 0; idx < sblock_ele_j;)
+                {
+                    for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
+                    {
+                        memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_K);
+                        mat1_ptr += block_ele_k*block_ele_j;
+                    }
+                    mat2_ptr += n;
+                    ++idx;
+
+#if BLOCK_K != SBLOCK_K
+                    if (! (idx%block_ele_j) )
+                        mat1_ptr -= block_ele_k*block_ele_j - block_ele_k;
+                    else
+#endif
+                        mat1_ptr -= block_ele_k*(block_ele_j)*block_nk - block_ele_k;
+                }
+
+    for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
+    {
+        for (int j_outer2= 0; j_outer2< sblock_ele_j; j_outer2 += block_ele_j)
+        {
+            for (int k_outer2= 0; k_outer2< sblock_ele_k; k_outer2 += block_ele_k)
+            {
+                for (int i_inner = 0; i_inner < block_ele_i; i_inner += 2)
+                {
+                    mat1_ptr = packed_a + (i_outer2*block_nk + i_inner)*block_ele_k + k_outer2*block_ele_i;
+                    mat1_ptr2 = mat1_ptr + block_ele_k;
+
+                    dst_ptr = dst + (i_outer + i_outer2 + i_inner)*n + j_outer + j_outer2;
+                    dst_ptr2 = dst_ptr + n;
+
+                    for (int j_inner = 0; j_inner < block_ele_j; j_inner += simd_ele_width)
+                    {
+                            _tile_loadd(1, dst_ptr, n);
+
+                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += simd_ele_width)
+                            {
+                                _tile_loadd(2, mat1_ptr + k_inner, block_ele_k);
+                                _tile_loadd(3, mat2_ptr + k_inner, block_ele_k);
+                                _tile_dpbf16ps(1, 2, 3);
+                            }
+
+                            _tile_stored(1, dst_ptr + j_inner, n);
+
+                       }}}
+                    }
+                }
+            }
+        }
+    }
+    _tile_release();
+    return NULL;
+}
+#endif // USE_AMX
 
 #endif  // __GEMM_H__
