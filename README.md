@@ -1,6 +1,6 @@
 # GEMM 
 
-High performance GEMM algorithm written in C using AVX
+High performance GEMM kernels written in C using AVX and AMX
 intrinsics. Currently achieves ~80% performance of OpenBLAS (at least on my
 systems). 
 
@@ -46,6 +46,8 @@ For the library:
 For the `bench` program:
 
 * OpenBLAS (for verifying correctness and providing a baseline to compare against)
+    - If using AMX, OpenBLAS must be compiled with `BUILD_BFLOAT16=1` (NOT the
+      default)
 
 # Build
 

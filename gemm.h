@@ -10,11 +10,13 @@
 void* simd_gemm_worker(void *argv);
 void* simd_gemm_worker_avx512(void *argv);
 void* simd_gemm_worker_amx(void *argv);
+void amx_relayout(__bf16 *b_mat, int n_col, int n_row);
 
 #ifdef USE_AMX
 typedef struct{
     uint8_t  palette;
-    uint8_t  _resvd[15];
+    uint8_t  start_row;
+    uint8_t  _resvd[14];
     uint16_t tile_cols[8];
     uint16_t _resvd2[8];
     uint8_t  tile_rows[8];
@@ -55,7 +57,7 @@ void simd_gemm(T * __restrict mat1, T * __restrict mat2, float * __restrict dst,
     {
         gemmOptns<T> optn =  {mat1, mat2, dst, n, th_id};
         thd_optns[th_id] = optn;
-#ifdef USE_MX
+#ifdef USE_AMX
         pthread_create(&thds[th_id], NULL, &simd_gemm_worker_amx, (void*)&thd_optns[th_id]);
 #elif defined(USE_AVX512)
         pthread_create(&thds[th_id], NULL, &simd_gemm_worker_avx512, (void*)&thd_optns[th_id]);
@@ -708,14 +710,14 @@ void* simd_gemm_worker_amx(void *argv)
     // configuraiton for dst tiles
     for (int idx = 0; idx < 1; ++idx)
     {
-        tilecfg.tile_cols[idx] = 16;
+        tilecfg.tile_cols[idx] = 16 * 4;
         tilecfg.tile_rows[idx] = 16;
     }
 
     // configuration for mat1/mat2 tiles
     for (int idx = 1; idx < 4; ++idx)
     {
-        tilecfg.tile_cols[idx] = 16;
+        tilecfg.tile_cols[idx] = 64;//32;//16;// * 2;
         tilecfg.tile_rows[idx] = 16;
     }
 
@@ -750,25 +752,25 @@ void* simd_gemm_worker_amx(void *argv)
             {
                 __bf16 packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
 
-                mat2_ptr = mat2 + (j_outer)*n + k_outer;
+                mat2_ptr = mat2 + (k_outer/2)*n*2 + j_outer*2;
                 mat1_ptr = packed_b;
 
-                for (int idx = 0; idx < sblock_ele_j;)
+                for (int idx = 0; idx < sblock_ele_k/2;)
                 {
-                    for (int jdx = 0; jdx < sblock_ele_k; jdx += block_ele_k)
+                    for (int jdx = 0; jdx < sblock_ele_j*2; jdx += block_ele_j*2)
                     {
-                        memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_K);
-                        mat1_ptr += block_ele_k*block_ele_j;
+                        memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_J*2);
+                        mat1_ptr += block_ele_j*block_ele_k;
                     }
-                    mat2_ptr += n;
+                    mat2_ptr += n*2;
                     ++idx;
 
 #if BLOCK_K != SBLOCK_K
-                    if (! (idx%block_ele_j) )
-                        mat1_ptr -= block_ele_k*block_ele_j - block_ele_k;
+                    if (! (idx%(block_ele_k/2)) )
+                        mat1_ptr -= block_ele_j*block_ele_k - block_ele_j*2;
                     else
 #endif
-                        mat1_ptr -= block_ele_k*(block_ele_j)*block_nk - block_ele_k;
+                        mat1_ptr -= block_ele_j*(block_ele_k)*block_nj - block_ele_j*2;
                 }
 
     for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
@@ -777,7 +779,7 @@ void* simd_gemm_worker_amx(void *argv)
         {
             for (int k_outer2= 0; k_outer2< sblock_ele_k; k_outer2 += block_ele_k)
             {
-                for (int i_inner = 0; i_inner < block_ele_i; i_inner += 2)
+                for (int i_inner = 0; i_inner < block_ele_i; i_inner += 16)
                 {
                     mat1_ptr = packed_a + (i_outer2*block_nk + i_inner)*block_ele_k + k_outer2*block_ele_i;
                     mat1_ptr2 = mat1_ptr + block_ele_k;
@@ -785,18 +787,21 @@ void* simd_gemm_worker_amx(void *argv)
                     dst_ptr = dst + (i_outer + i_outer2 + i_inner)*n + j_outer + j_outer2;
                     dst_ptr2 = dst_ptr + n;
 
-                    for (int j_inner = 0; j_inner < block_ele_j; j_inner += simd_ele_width)
+                    for (int j_inner = 0; j_inner < block_ele_j; j_inner += 16)
                     {
-                            _tile_loadd(1, dst_ptr, n);
+                            _tile_loadd(1, dst_ptr + j_inner, n*sizeof(float));
+                            mat2_ptr  = packed_b + j_outer2*2*block_ele_k/2 + k_outer2/2*block_ele_j*2*block_nj + j_inner*2;
 
-                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += simd_ele_width)
+                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += 32 )
                             {
-                                _tile_loadd(2, mat1_ptr + k_inner, block_ele_k);
-                                _tile_loadd(3, mat2_ptr + k_inner, block_ele_k);
+                                _tile_loadd(2, mat1_ptr + k_inner, BLOCK_K);
+                                _tile_loadd(3, mat2_ptr + k_inner/2*block_ele_j*2, BLOCK_J*2);
                                 _tile_dpbf16ps(1, 2, 3);
+                                //_tile_dpbf16ps(1, 2, 3);
+                                //_tile_dpbssd(1, 2, 3);
                             }
 
-                            _tile_stored(1, dst_ptr + j_inner, n);
+                            _tile_stored(1, dst_ptr + j_inner, n*sizeof(float));
 
                        }}}
                     }

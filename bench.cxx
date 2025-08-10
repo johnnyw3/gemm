@@ -21,13 +21,8 @@ int main(int argv, char **argc)
     read_mat(argc[2], &n, &mat2);
     std::size_t n_large = n;
 
-//#ifdef USE_AMX
-//    std::size_t mat_sz = sizeof(__bf16) * n * n;
-//    __bf16 *dst = (__bf16*)aligned_alloc(64, mat_sz);
-//#else
     std::size_t mat_sz = sizeof(float) * n * n;
     float *dst = (float*)aligned_alloc(64, mat_sz);
-//#endif
 
     float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
     std::size_t time_sum_blas =0;
@@ -50,13 +45,23 @@ int main(int argv, char **argc)
 
     std::size_t time_sum = 0;
 
+#ifndef USE_AMX
+    // Transpose only needed for AVX kernels.
     cpu_transpose(mat2, n);
-    //cpu_transpose(mat1, n);
-    //cpu_transpose(dst, n);
+#else
+    // For AMX, there is a "relayout" step due to the unconventional structre
+    // for the right matrix required by AMX. This is here so we can rerun the
+    // relayout procedure for each iteration.
+    __bf16 *mat2_orig = (__bf16*)malloc(sizeof(__bf16) * n * n);
+    memcpy(mat2_orig, mat2, sizeof(__bf16) * n * n);
+#endif
 
     for (int idx = 0; idx < 10; ++idx)
     {
         auto const start = std::chrono::high_resolution_clock::now();
+#ifdef USE_AMX
+        amx_relayout(mat2, n, n);
+#endif
         simd_gemm(mat1, mat2, dst, n);
 
         auto const end = std::chrono::high_resolution_clock::now();
@@ -64,11 +69,16 @@ int main(int argv, char **argc)
         //printf("done\n");
 
         //print_mat(dst, n);
+        //print_mat(mat2, n);
         verify_matrix(dst_cblas, dst, n);
 
         // zero dst so that the algorithm actually needs to successfully run for
         // multiple tests to pass.
         memset(dst, 0, mat_sz);
+#ifdef USE_AMX
+        // Restore the original matrix so we can rerun the relayout step.
+        memcpy(mat2, mat2_orig, sizeof(__bf16) * n * n);
+#endif
     }
 
     printf("\n");
@@ -78,7 +88,11 @@ int main(int argv, char **argc)
     
     free(mat1);
     free(mat2);
+#ifdef USE_AMX
+    free(mat2_orig);
+#endif
     free(dst);
+    free(dst_cblas);
     return 0;
 
 }
@@ -137,6 +151,17 @@ void print_mat(int *mat, int n)
     {
         for (int jdx = 0; jdx < n; ++jdx)
             printf("%d ", *(mat + idx*n + jdx));
+        printf("\n");
+    }
+
+}
+
+void print_mat(__bf16 *mat, int n)
+{
+    for (int idx = 0; idx < n; ++idx)
+    {
+        for (int jdx = 0; jdx < n; ++jdx)
+            printf("%.0f ", (float)*(mat + idx*n + jdx));
         printf("\n");
     }
 
@@ -231,7 +256,7 @@ void verify_matrix(float *exp, float *act, int n)
 
             if (exp_val != act_val)
             {
-                printf("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx_y, exp_val, act_val);
+                printf("difference at: (%d, %d). exp: %.2f, act: %.2f\n", idx_x, idx_y, exp_val, act_val);
                 incorrect = 1;
             }
         }

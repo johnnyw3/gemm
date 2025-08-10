@@ -4,6 +4,7 @@
 int read_mat(char *fname, int *n, __bf16 **dst);
 int read_mat(char *fname, int *n, float **dst);
 void print_mat(float *mat, int n);
+void print_mat(__bf16 *mat, int n);
 double get_gflops(std::size_t us, std::size_t n);
 void cblas_gemm(__bf16 *mat1, __bf16 *mat2, float *dst, int n);
 void cblas_gemm(float *mat1, float *mat2, float *dst, int n);
