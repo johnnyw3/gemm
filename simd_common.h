@@ -4,20 +4,24 @@
 
 #ifdef __AMX_TILE__
 #define USE_AMX
-#define SIMD_WIDTH 32 
+#define SIMD_WIDTH  64 // AMX tiles are at most 64 bytes wide
+#define SIMD_HEIGHT 16
 #elif defined(__AVX512F__)
-#define SIMD_WIDTH 64 // in bytes -> 512-bit (AVX512)
+#define SIMD_WIDTH  64 // in bytes -> 512-bit (AVX512)
+#define SIMD_HEIGHT  1
 #define USE_AVX512
 #elif defined(__AVX2__)
-#define SIMD_WIDTH 32   // in bytes -> 256-bit (AVX2)
+#define SIMD_WIDTH  32 // in bytes -> 256-bit (AVX2)
+#define SIMD_HEIGHT  1
 #else
 // NOTE: AVX (original) support not yet implemented
-#define SIMD_WIDTH 16   // in bytes -> 128-bit (original AVX)
+#define SIMD_WIDTH  16 // in bytes -> 128-bit (original AVX)
+#define SIMD_HEIGHT  1
 #error "Original (128-bit) AVX support not implemented."
 #endif
 
 #ifdef USE_AMX
-#define BLOCK_I 64
+#define BLOCK_I 1024
 #define BLOCK_J 1024
 #if NUM_THREADS == 1
 #define BLOCK_K 1024

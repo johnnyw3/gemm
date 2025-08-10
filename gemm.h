@@ -683,19 +683,24 @@ void* simd_gemm_worker_amx(void *argv)
     __bf16 * const mat2 = optns->mat2;
     float  * const dst  = optns->dst;
     const int    n    = optns->n;
+    const int    n_dst_bytes = n * sizeof(float);
     const int    th_id = optns->th_id;
     const int    thd_loop_sz = n / NUM_THREADS;
     const int    start_idx = thd_loop_sz * th_id;
     const int    stop_idx  = start_idx + thd_loop_sz;
 
-    constexpr int simd_ele_width  = SIMD_WIDTH  / sizeof(__bf16);
+    constexpr int amx_ele_x   = SIMD_WIDTH / sizeof(__bf16);
     constexpr int block_ele_i = BLOCK_I / sizeof(__bf16);
     constexpr int block_ele_j = BLOCK_J / sizeof(__bf16);
     constexpr int block_ele_k = BLOCK_K / sizeof(__bf16);
+    constexpr int mat2_block_j = BLOCK_J * 2;
+    constexpr int mat2_block_ele_j = block_ele_j * 2;
+    constexpr int mat2_block_ele_k = block_ele_k / 2;
     constexpr int sblock_ele_i = SBLOCK_I / sizeof(__bf16);
     constexpr int sblock_ele_j = SBLOCK_J / sizeof(__bf16);
     constexpr int sblock_ele_k = SBLOCK_K / sizeof(__bf16);
-    //int vec_n = n / simd_ele_width;
+    constexpr int mat2_sblock_ele_j = sblock_ele_j * 2;
+    constexpr int mat2_sblock_ele_k = sblock_ele_k / 2;
     constexpr int block_ni = sblock_ele_i/block_ele_i;
     constexpr int block_nj = sblock_ele_j/block_ele_j;
     constexpr int block_nk = sblock_ele_k/block_ele_k;
@@ -710,15 +715,15 @@ void* simd_gemm_worker_amx(void *argv)
     // configuraiton for dst tiles
     for (int idx = 0; idx < 1; ++idx)
     {
-        tilecfg.tile_cols[idx] = 16 * 4;
-        tilecfg.tile_rows[idx] = 16;
+        tilecfg.tile_cols[idx] = SIMD_WIDTH;
+        tilecfg.tile_rows[idx] = SIMD_HEIGHT;
     }
 
     // configuration for mat1/mat2 tiles
-    for (int idx = 1; idx < 4; ++idx)
+    for (int idx = 1; idx < 8; ++idx)
     {
-        tilecfg.tile_cols[idx] = 64;//32;//16;// * 2;
-        tilecfg.tile_rows[idx] = 16;
+        tilecfg.tile_cols[idx] = SIMD_WIDTH;
+        tilecfg.tile_rows[idx] = SIMD_HEIGHT;
     }
 
     _tile_loadconfig(&tilecfg);
@@ -755,22 +760,22 @@ void* simd_gemm_worker_amx(void *argv)
                 mat2_ptr = mat2 + (k_outer/2)*n*2 + j_outer*2;
                 mat1_ptr = packed_b;
 
-                for (int idx = 0; idx < sblock_ele_k/2;)
+                for (int idx = 0; idx < mat2_sblock_ele_k;)
                 {
-                    for (int jdx = 0; jdx < sblock_ele_j*2; jdx += block_ele_j*2)
+                    for (int jdx = 0; jdx < mat2_sblock_ele_j; jdx += mat2_block_ele_j)
                     {
-                        memcpy(mat1_ptr, mat2_ptr + jdx, BLOCK_J*2);
-                        mat1_ptr += block_ele_j*block_ele_k;
+                        memcpy(mat1_ptr, mat2_ptr + jdx, mat2_block_j);
+                        mat1_ptr += mat2_block_ele_j*mat2_block_ele_k;
                     }
                     mat2_ptr += n*2;
                     ++idx;
 
 #if BLOCK_K != SBLOCK_K
-                    if (! (idx%(block_ele_k/2)) )
-                        mat1_ptr -= block_ele_j*block_ele_k - block_ele_j*2;
+                    if (! (idx%mat2_block_ele_k) )
+                        mat1_ptr -= mat2_block_ele_j*mat2_block_ele_k - mat2_block_ele_j;
                     else
 #endif
-                        mat1_ptr -= block_ele_j*(block_ele_k)*block_nj - block_ele_j*2;
+                        mat1_ptr -= mat2_block_ele_j*mat2_block_ele_k*block_nj - mat2_block_ele_j;
                 }
 
     for (int i_outer2 = 0; i_outer2< sblock_ele_i; i_outer2+= block_ele_i)
@@ -779,29 +784,39 @@ void* simd_gemm_worker_amx(void *argv)
         {
             for (int k_outer2= 0; k_outer2< sblock_ele_k; k_outer2 += block_ele_k)
             {
-                for (int i_inner = 0; i_inner < block_ele_i; i_inner += 16)
+                for (int i_inner = 0; i_inner < block_ele_i; i_inner += SIMD_HEIGHT*2)
                 {
                     mat1_ptr = packed_a + (i_outer2*block_nk + i_inner)*block_ele_k + k_outer2*block_ele_i;
-                    mat1_ptr2 = mat1_ptr + block_ele_k;
+                    mat1_ptr2 = mat1_ptr + SIMD_HEIGHT*block_ele_k;
 
                     dst_ptr = dst + (i_outer + i_outer2 + i_inner)*n + j_outer + j_outer2;
-                    dst_ptr2 = dst_ptr + n;
+                    dst_ptr2 = dst_ptr + n*SIMD_HEIGHT;
 
-                    for (int j_inner = 0; j_inner < block_ele_j; j_inner += 16)
+                    for (int j_inner = 0; j_inner < block_ele_j; j_inner += SIMD_HEIGHT*2)
                     {
-                            _tile_loadd(1, dst_ptr + j_inner, n*sizeof(float));
-                            mat2_ptr  = packed_b + j_outer2*2*block_ele_k/2 + k_outer2/2*block_ele_j*2*block_nj + j_inner*2;
+                            _tile_loadd(0, dst_ptr + j_inner, n_dst_bytes);
+                            _tile_loadd(1, dst_ptr + j_inner + SIMD_HEIGHT, n_dst_bytes);
+                            _tile_loadd(2, dst_ptr2+ j_inner, n_dst_bytes);
+                            _tile_loadd(3, dst_ptr2+ j_inner + SIMD_HEIGHT, n_dst_bytes);
+                            mat2_ptr  = packed_b + j_outer2*2*mat2_block_ele_k + k_outer2/2*mat2_block_ele_j*block_nj + j_inner*2;
+                            mat2_ptr2 = mat2_ptr + SIMD_HEIGHT*2;
 
-                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += 32 )
+                            for (int k_inner = 0; k_inner < block_ele_k; k_inner += amx_ele_x )
                             {
-                                _tile_loadd(2, mat1_ptr + k_inner, BLOCK_K);
-                                _tile_loadd(3, mat2_ptr + k_inner/2*block_ele_j*2, BLOCK_J*2);
-                                _tile_dpbf16ps(1, 2, 3);
-                                //_tile_dpbf16ps(1, 2, 3);
-                                //_tile_dpbssd(1, 2, 3);
+                                _tile_loadd(4, mat1_ptr + k_inner, BLOCK_K);
+                                _tile_loadd(5, mat1_ptr2 + k_inner, BLOCK_K);
+                                _tile_loadd(6, mat2_ptr + k_inner/2*mat2_block_ele_j, mat2_block_j);
+                                _tile_loadd(7, mat2_ptr2+ k_inner/2*mat2_block_ele_j, mat2_block_j);
+                                _tile_dpbf16ps(0, 4, 6);
+                                _tile_dpbf16ps(1, 4, 7);
+                                _tile_dpbf16ps(2, 5, 6);
+                                _tile_dpbf16ps(3, 5, 7);
                             }
 
-                            _tile_stored(1, dst_ptr + j_inner, n*sizeof(float));
+                            _tile_stored(0, dst_ptr + j_inner, n_dst_bytes);
+                            _tile_stored(1, dst_ptr + j_inner + SIMD_HEIGHT, n_dst_bytes);
+                            _tile_stored(2, dst_ptr2+ j_inner, n_dst_bytes);
+                            _tile_stored(3, dst_ptr2+ j_inner + SIMD_HEIGHT, n_dst_bytes);
 
                        }}}
                     }

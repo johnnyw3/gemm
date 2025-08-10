@@ -26,7 +26,8 @@ int main(int argv, char **argc)
 
     float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
     std::size_t time_sum_blas =0;
-    for (int idx = 0; idx < 10; ++idx)
+    int num_runs_cblas = 10;
+    for (int idx = 0; idx < num_runs_cblas; ++idx)
     {
         memset(dst_cblas, 0, sizeof(float) * n * n);
 
@@ -37,13 +38,14 @@ int main(int argv, char **argc)
         time_sum_blas += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     }
-    double gflops = get_gflops(time_sum_blas, 10*2*n_large*n_large*n_large);
-    printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas/10.0/US_PER_S, gflops);
+    double gflops = get_gflops(time_sum_blas, num_runs_cblas*2*n_large*n_large*n_large);
+    printf("OpenBLAS time: %lfs, gflops: %f\n", time_sum_blas*1.0/num_runs_cblas/US_PER_S, gflops);
     //print_mat(dst_cblas, n);
 
     memset(dst, 0, mat_sz);
 
     std::size_t time_sum = 0;
+    int num_runs = 10;
 
 #ifndef USE_AMX
     // Transpose only needed for AVX kernels.
@@ -56,7 +58,7 @@ int main(int argv, char **argc)
     memcpy(mat2_orig, mat2, sizeof(__bf16) * n * n);
 #endif
 
-    for (int idx = 0; idx < 10; ++idx)
+    for (int idx = 0; idx < num_runs; ++idx)
     {
         auto const start = std::chrono::high_resolution_clock::now();
 #ifdef USE_AMX
@@ -83,8 +85,8 @@ int main(int argv, char **argc)
 
     printf("\n");
 
-    gflops = get_gflops(time_sum, 10*2*n_large*n_large*n_large);
-    printf("Avg time: %lfs, gflops: %f\n", time_sum/10.0/US_PER_S, gflops);
+    gflops = get_gflops(time_sum, num_runs*2*n_large*n_large*n_large);
+    printf("Avg time: %lfs, gflops: %f\n", time_sum*1.0/num_runs/US_PER_S, gflops);
     
     free(mat1);
     free(mat2);
