@@ -10,7 +10,8 @@
 void* simd_gemm_worker(void *argv);
 void* simd_gemm_worker_avx512(void *argv);
 void* simd_gemm_worker_amx(void *argv);
-void amx_relayout(__bf16 *b_mat, int n_col, int n_row);
+__bf16 *amx_relayout(__bf16 *b_mat, int n_col, int n_row);
+//void amx_relayout(__bf16 *b_mat, int n_col, int n_row);
 
 #ifdef USE_AMX
 typedef struct{
@@ -705,6 +706,8 @@ void* simd_gemm_worker_amx(void *argv)
     constexpr int block_nj = sblock_ele_j/block_ele_j;
     constexpr int block_nk = sblock_ele_k/block_ele_k;
 
+    const int mat2_cols = n*2;
+
     __bf16 * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict mat1_ptr2;
     __bf16 * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
     float  * __restrict dst_ptr, * __restrict dst_ptr2;
@@ -757,7 +760,7 @@ void* simd_gemm_worker_amx(void *argv)
             {
                 __bf16 packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
 
-                mat2_ptr = mat2 + (k_outer/2)*n*2 + j_outer*2;
+                mat2_ptr = mat2 + (k_outer/2)*mat2_cols + j_outer*2;
                 mat1_ptr = packed_b;
 
                 for (int idx = 0; idx < mat2_sblock_ele_k;)
@@ -767,7 +770,7 @@ void* simd_gemm_worker_amx(void *argv)
                         memcpy(mat1_ptr, mat2_ptr + jdx, mat2_block_j);
                         mat1_ptr += mat2_block_ele_j*mat2_block_ele_k;
                     }
-                    mat2_ptr += n*2;
+                    mat2_ptr += mat2_cols;
                     ++idx;
 
 #if BLOCK_K != SBLOCK_K

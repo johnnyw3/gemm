@@ -1,6 +1,6 @@
 # GEMM 
 
-High performance GEMM kernels written in C using AVX and AMX
+High performance GEMM kernels written in C++ using AVX and AMX
 intrinsics. Currently achieves ~80% performance of OpenBLAS (at least on my
 systems). 
 
@@ -10,23 +10,23 @@ On my systems, I can achieve comparable performance to Salykov's code.
 
 # Benchmarks
 
-(I know, fight me for testing on mobile CPUs)
+Metrics are in GFLOPs; speedups are compared to OpenBLAS. Types are `fp32` for
+AVX-based kernels and `bf16` input/`fp32` result for AMX.
 
-Metrics are in GFLOPs; speedups are compared to OpenBLAS.
+**Single-threaded, n=4096** average of 10 runs
 
-**Single-threaded, n=4096, fp32,** average of 10 runs
+| Kernel | CPU | This algorithm | OpenBLAS | Speedup |
+|:-------|:----|---------------:|---------:|:------------------|
+AVX2 | **Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
+AVX-512 | **Tiger Lake** i5-1135G7 | 106 | 122 | 0.87 |
+AMX | **Emerald Rapids** Xeon 6972P | 1090 | 1170 | 0.93 |
 
-| CPU | This algorithm | OpenBLAS | Speedup |
-|:----|---------------:|---------:|:------------------|
-**Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
-**Tiger Lake** i5-1135G7 | 106 | 122 | 0.87 |
+**4 threads, n=4096** average of 10 runs
 
-**4 threads, n=4096, fp32,** average of 10 runs
-
-| CPU | This algorithm | OpenBLAS | Speedup |
-|:----|---------------:|---------:|:------------------|
-**Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
-**Tiger Lake** i5-1135G7 | 380 | 465 | 0.82 |
+| Kernel | CPU | This algorithm | OpenBLAS | Speedup |
+|:-------|:----|---------------:|---------:|:------------------|
+AVX2 | **Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
+AVX-512 | **Tiger Lake** i5-1135G7 | 380 | 465 | 0.82 |
 
 # Prerequisites
 
@@ -57,8 +57,8 @@ To build, use the given makefile, specifying your march. For example:
 $ make TARGET=skylake
 ```
 
-When compiling for a target that supports AVX-512, AVX-512 operations will 
-automatically be used.
+The fastest available kernel (AVX2, AVX-512, or AMX) will be chosen based on the
+features available in the `TARGET` architecture.
 
 By default, multithreading is enabled using as many threads as logical
 processors on your system. To change the number of threads, pass the

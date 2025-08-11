@@ -26,7 +26,7 @@ int main(int argv, char **argc)
 
     float *dst_cblas = (float*)aligned_alloc(64, (sizeof(float) * n * n));
     std::size_t time_sum_blas =0;
-    int num_runs_cblas = 10;
+    int num_runs_cblas = 30;
     for (int idx = 0; idx < num_runs_cblas; ++idx)
     {
         memset(dst_cblas, 0, sizeof(float) * n * n);
@@ -45,26 +45,23 @@ int main(int argv, char **argc)
     memset(dst, 0, mat_sz);
 
     std::size_t time_sum = 0;
-    int num_runs = 10;
+    int num_runs = 30;
 
 #ifndef USE_AMX
     // Transpose only needed for AVX kernels.
     cpu_transpose(mat2, n);
-#else
-    // For AMX, there is a "relayout" step due to the unconventional structre
-    // for the right matrix required by AMX. This is here so we can rerun the
-    // relayout procedure for each iteration.
-    __bf16 *mat2_orig = (__bf16*)malloc(sizeof(__bf16) * n * n);
-    memcpy(mat2_orig, mat2, sizeof(__bf16) * n * n);
 #endif
 
     for (int idx = 0; idx < num_runs; ++idx)
     {
         auto const start = std::chrono::high_resolution_clock::now();
 #ifdef USE_AMX
-        amx_relayout(mat2, n, n);
+        __bf16 *mat2_relayed = amx_relayout(mat2, n, n);
 #endif
-        simd_gemm(mat1, mat2, dst, n);
+        simd_gemm(mat1, mat2_relayed, dst, n);
+#ifdef USE_AMX
+        free(mat2_relayed);
+#endif
 
         auto const end = std::chrono::high_resolution_clock::now();
         time_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -72,15 +69,12 @@ int main(int argv, char **argc)
 
         //print_mat(dst, n);
         //print_mat(mat2, n);
+        //print_mat(mat2_relayed, n);
         verify_matrix(dst_cblas, dst, n);
 
         // zero dst so that the algorithm actually needs to successfully run for
         // multiple tests to pass.
         memset(dst, 0, mat_sz);
-#ifdef USE_AMX
-        // Restore the original matrix so we can rerun the relayout step.
-        memcpy(mat2, mat2_orig, sizeof(__bf16) * n * n);
-#endif
     }
 
     printf("\n");
@@ -90,9 +84,6 @@ int main(int argv, char **argc)
     
     free(mat1);
     free(mat2);
-#ifdef USE_AMX
-    free(mat2_orig);
-#endif
     free(dst);
     free(dst_cblas);
     return 0;

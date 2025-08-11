@@ -21,7 +21,7 @@
 #endif
 
 #ifdef USE_AMX
-#define BLOCK_I 1024
+#define BLOCK_I 2048
 #define BLOCK_J 1024
 #if NUM_THREADS == 1
 #define BLOCK_K 1024
