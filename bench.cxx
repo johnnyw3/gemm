@@ -1,11 +1,15 @@
 #include <iostream>
 #include <chrono>
 #include <stdint.h>
-#include <cblas.h>
 #include "simd_common.h"
 #include "gemm.h"
 #include "bench.h"
-//#include "mkl.h"
+
+#ifdef USE_MKL
+#include "mkl.h"
+#else
+#include <cblas.h>
+#endif
 
 int main(int argv, char **argc)
 {
@@ -56,13 +60,7 @@ int main(int argv, char **argc)
     for (int idx = 0; idx < num_runs; ++idx)
     {
         auto const start = std::chrono::high_resolution_clock::now();
-#ifdef USE_AMX
-        //__bf16 *mat2_relayed = amx_relayout(mat2, n, n);
-#endif
         simd_gemm(mat1, mat2, dst, n);
-#ifdef USE_AMX
-        //free(mat2_relayed);
-#endif
 
         auto const end = std::chrono::high_resolution_clock::now();
         time_sum += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -180,12 +178,13 @@ double get_gflops(std::size_t us, std::size_t n)
 
 void cblas_gemm(__bf16 *mat1, __bf16 *mat2, float *dst, int n)
 {
-
+#ifdef USE_MKL
+    cblas_gemm_bf16bf16f32_compute( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
+                  (MKL_BF16*)mat1, n, (MKL_BF16*)mat2, n, 1.0, dst, n );
+#else
     cblas_sbgemm( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
                   (bfloat16 *)mat1, n, (bfloat16 *)mat2, n, 1.0, dst, n );
-    //cblas_gemm_bf16bf16f32_compute( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
-    //              (MKL_BF16*)mat1, n, (MKL_BF16*)mat2, n, 1.0, dst, n );
-
+#endif
 }
 
 void cblas_gemm(float *mat1, float *mat2, float *dst, int n)
@@ -208,7 +207,7 @@ void verify_matrix(__bf16 *exp, __bf16 *act, int n)
 
             if (exp_val != act_val)
             {
-                printf("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx_y, exp_val, act_val);
+                printf("difference at: (%d, %d). exp: %f, act: %f\n", idx_x, idx_y, (float)exp_val, (float)act_val);
                 incorrect = 1;
             }
         }

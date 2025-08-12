@@ -98,15 +98,51 @@ void* simd_gemm_worker(void *argv)
     constexpr int block_nj = sblock_ele_j/block_ele_j;
     constexpr int block_nk = sblock_ele_k/block_ele_k;
 
+    int i_start_idx, i_stop_idx, k_start_idx, k_stop_idx, j_start_idx, j_stop_idx;
+
+    // does not work if number of threads is greater than
+    // total number of superblocks
+    if (thd_loop_sz < sblock_ele_i)
+    {
+        const int num_i_thds = n / sblock_ele_i;
+        const int num_j_thds = thd_loop_sz * num_i_thds < sblock_ele_j ?
+                n / sblock_ele_j : NUM_THREADS / num_i_thds;
+        // parallelisze on k last becausse that's where we have multiple threads
+        // writing to the same dst cells
+        // Add 'combine' step at the end if need parallelism on `k`?
+        const int num_k_thds = (num_i_thds * num_j_thds) < NUM_THREADS ?
+                NUM_THREADS / (num_i_thds * num_j_thds) : 1;
+
+        //printf("num_i_thds %d num_k_thds %d num_j_thds %d\n", num_i_thds, num_k_thds, num_j_thds);
+        i_start_idx = th_id / (num_k_thds * num_j_thds) * sblock_ele_i;
+        i_stop_idx  = i_start_idx + sblock_ele_i;
+        j_start_idx = (th_id % (num_k_thds * num_j_thds)) / num_k_thds * (n / num_j_thds);
+        j_stop_idx  = j_start_idx + (n / num_j_thds);
+        k_start_idx = (th_id % num_k_thds) * (n / num_k_thds);
+        k_stop_idx  = k_start_idx + (n / num_k_thds);
+    } else
+    {
+        i_start_idx = thd_loop_sz * th_id;
+        i_stop_idx  = i_start_idx + thd_loop_sz;
+        j_start_idx = 0;
+        j_stop_idx  = n;
+        k_start_idx = 0;
+        k_stop_idx  = n;
+    }
+
+    //printf("th_id: %d, i: start %d stop %d, k: start %d stop %d, j: start %d stop %d\n",
+    //       th_id, i_start_idx, i_stop_idx, k_start_idx, k_stop_idx,
+    //       j_start_idx, j_stop_idx);
+
     float * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict dst_ptr;
     float * __restrict mat1_ptr2, * __restrict dst_ptr2;
     float * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
 
-    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += sblock_ele_i)
+    for (int i_outer = i_start_idx; i_outer < i_stop_idx; i_outer += sblock_ele_i)
     {
-        for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_j)
+        for (int j_outer = j_start_idx; j_outer < j_stop_idx; j_outer += sblock_ele_j)
         {
-            for (int k_outer = 0; k_outer < n; k_outer += sblock_ele_k)
+            for (int k_outer = k_start_idx; k_outer < k_stop_idx; k_outer += sblock_ele_k)
             {
                 float packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
                 float packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
@@ -319,8 +355,6 @@ void* simd_gemm_worker_avx512(void *argv)
     const int    n    = optns->n;
     const int    th_id = optns->th_id;
     const int    thd_loop_sz = n / NUM_THREADS;
-    const int    start_idx = thd_loop_sz * th_id;
-    const int    stop_idx  = start_idx + thd_loop_sz;
 
     constexpr int simd_ele_width  = SIMD_WIDTH  / sizeof(float);
     constexpr int block_ele_i = BLOCK_I / sizeof(float);
@@ -334,13 +368,49 @@ void* simd_gemm_worker_avx512(void *argv)
     constexpr int block_nj = sblock_ele_j/block_ele_j;
     constexpr int block_nk = sblock_ele_k/block_ele_k;
 
+    int i_start_idx, i_stop_idx, k_start_idx, k_stop_idx, j_start_idx, j_stop_idx;
+
+    // does not work if number of threads is greater than
+    // total number of superblocks
+    if (thd_loop_sz < sblock_ele_i)
+    {
+        const int num_i_thds = n / sblock_ele_i;
+        const int num_j_thds = thd_loop_sz * num_i_thds < sblock_ele_j ?
+                n / sblock_ele_j : NUM_THREADS / num_i_thds;
+        // parallelisze on k last becausse that's where we have multiple threads
+        // writing to the same dst cells
+        // Add 'combine' step at the end if need parallelism on `k`?
+        const int num_k_thds = (num_i_thds * num_j_thds) < NUM_THREADS ?
+                NUM_THREADS / (num_i_thds * num_j_thds) : 1;
+
+        //printf("num_i_thds %d num_k_thds %d num_j_thds %d\n", num_i_thds, num_k_thds, num_j_thds);
+        i_start_idx = th_id / (num_k_thds * num_j_thds) * sblock_ele_i;
+        i_stop_idx  = i_start_idx + sblock_ele_i;
+        j_start_idx = (th_id % (num_k_thds * num_j_thds)) / num_k_thds * (n / num_j_thds);
+        j_stop_idx  = j_start_idx + (n / num_j_thds);
+        k_start_idx = (th_id % num_k_thds) * (n / num_k_thds);
+        k_stop_idx  = k_start_idx + (n / num_k_thds);
+    } else
+    {
+        i_start_idx = thd_loop_sz * th_id;
+        i_stop_idx  = i_start_idx + thd_loop_sz;
+        j_start_idx = 0;
+        j_stop_idx  = n;
+        k_start_idx = 0;
+        k_stop_idx  = n;
+    }
+
+    //printf("th_id: %d, i: start %d stop %d, k: start %d stop %d, j: start %d stop %d\n",
+    //       th_id, i_start_idx, i_stop_idx, k_start_idx, k_stop_idx,
+    //       j_start_idx, j_stop_idx);
+
     float * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict dst_ptr;
     float * __restrict mat1_ptr2, * __restrict dst_ptr2;
     float * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
 
-    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += sblock_ele_i)
+    for (int i_outer = i_start_idx; i_outer < i_stop_idx; i_outer += sblock_ele_i)
     {
-        for (int k_outer = 0; k_outer < n; k_outer += sblock_ele_k)
+        for (int k_outer = k_start_idx; k_outer < k_stop_idx; k_outer += sblock_ele_k)
         {
             float packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
 
@@ -363,7 +433,7 @@ void* simd_gemm_worker_avx512(void *argv)
 #endif
                     mat2_ptr -= block_ele_k*(block_ele_i)*block_nk - block_ele_k;
             }
-            for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_j)
+            for (int j_outer = j_start_idx; j_outer < j_stop_idx; j_outer += sblock_ele_j)
             {
                 float packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
 
@@ -687,8 +757,6 @@ void* simd_gemm_worker_amx(void *argv)
     const int    n_dst_bytes = n * sizeof(float);
     const int    th_id = optns->th_id;
     const int    thd_loop_sz = n / NUM_THREADS;
-    const int    start_idx = thd_loop_sz * th_id;
-    const int    stop_idx  = start_idx + thd_loop_sz;
 
     constexpr int amx_ele_x   = SIMD_WIDTH / sizeof(__bf16);
     constexpr int block_ele_i = BLOCK_I / sizeof(__bf16);
@@ -707,6 +775,41 @@ void* simd_gemm_worker_amx(void *argv)
     constexpr int block_nk = sblock_ele_k/block_ele_k;
 
     const int mat2_cols = n*2;
+    int i_start_idx, i_stop_idx, k_start_idx, k_stop_idx, j_start_idx, j_stop_idx;
+
+    // does not work if number of threads is greater than
+    // total number of superblocks
+    if (thd_loop_sz < sblock_ele_i)
+    {
+        const int num_i_thds = n / sblock_ele_i;
+        const int num_j_thds = thd_loop_sz * num_i_thds < sblock_ele_j ?
+                n / sblock_ele_j : NUM_THREADS / num_i_thds;
+        // parallelisze on k last becausse that's where we have multiple threads
+        // writing to the same dst cells
+        // Add 'combine' step at the end if need parallelism on `k`?
+        const int num_k_thds = (num_i_thds * num_j_thds) < NUM_THREADS ?
+                NUM_THREADS / (num_i_thds * num_j_thds) : 1;
+
+        //printf("num_i_thds %d num_k_thds %d num_j_thds %d\n", num_i_thds, num_k_thds, num_j_thds);
+        i_start_idx = th_id / (num_k_thds * num_j_thds) * sblock_ele_i;
+        i_stop_idx  = i_start_idx + sblock_ele_i;
+        j_start_idx = (th_id % (num_k_thds * num_j_thds)) / num_k_thds * (n / num_j_thds);
+        j_stop_idx  = j_start_idx + (n / num_j_thds);
+        k_start_idx = (th_id % num_k_thds) * (n / num_k_thds);
+        k_stop_idx  = k_start_idx + (n / num_k_thds);
+    } else
+    {
+        i_start_idx = thd_loop_sz * th_id;
+        i_stop_idx  = i_start_idx + thd_loop_sz;
+        j_start_idx = 0;
+        j_stop_idx  = n;
+        k_start_idx = 0;
+        k_stop_idx  = n;
+    }
+
+    //printf("th_id: %d, i: start %d stop %d, k: start %d stop %d, j: start %d stop %d\n",
+    //       th_id, i_start_idx, i_stop_idx, k_start_idx, k_stop_idx,
+    //       j_start_idx, j_stop_idx);
 
     __bf16 * __restrict mat1_ptr, * __restrict mat2_ptr, * __restrict mat1_ptr2;
     __bf16 * __restrict mat2_ptr2, * __restrict mat2_ptr3, * __restrict mat2_ptr4;
@@ -715,15 +818,9 @@ void* simd_gemm_worker_amx(void *argv)
     amx_tilecfg_t tilecfg = {0};
     tilecfg.palette = 1;
 
-    // configuraiton for dst tiles
-    for (int idx = 0; idx < 1; ++idx)
-    {
-        tilecfg.tile_cols[idx] = SIMD_WIDTH;
-        tilecfg.tile_rows[idx] = SIMD_HEIGHT;
-    }
-
-    // configuration for mat1/mat2 tiles
-    for (int idx = 1; idx < 8; ++idx)
+    // configuration for all tiles, matricies must be padded to match superblock
+    // sizes, so just use the max size for all tiles here
+    for (int idx = 0; idx < 8; ++idx)
     {
         tilecfg.tile_cols[idx] = SIMD_WIDTH;
         tilecfg.tile_rows[idx] = SIMD_HEIGHT;
@@ -731,9 +828,9 @@ void* simd_gemm_worker_amx(void *argv)
 
     _tile_loadconfig(&tilecfg);
 
-    for (int i_outer = start_idx; i_outer < stop_idx; i_outer += sblock_ele_i)
+    for (int i_outer = i_start_idx; i_outer < i_stop_idx; i_outer += sblock_ele_i)
     {
-        for (int k_outer = 0; k_outer < n; k_outer += sblock_ele_k)
+        for (int k_outer = k_start_idx; k_outer < k_stop_idx; k_outer += sblock_ele_k)
         {
             __bf16 packed_a[sblock_ele_k*sblock_ele_i] __attribute__ ((__aligned__(64)));
 
@@ -756,7 +853,7 @@ void* simd_gemm_worker_amx(void *argv)
 #endif
                     mat2_ptr -= block_ele_k*(block_ele_i)*block_nk - block_ele_k;
             }
-            for (int j_outer = 0; j_outer < n; j_outer += sblock_ele_j)
+            for (int j_outer = j_start_idx; j_outer < j_stop_idx; j_outer += sblock_ele_j)
             {
                 __bf16 packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
 

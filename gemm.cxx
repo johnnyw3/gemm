@@ -3,6 +3,7 @@
 #include <string.h>
 #include "simd_common.h"
 
+#ifdef USE_AMX
 __bf16 *amx_relayout(__bf16 *b_mat, int n_col, int n_row)
 {
     __bf16 *tmp = (__bf16*)malloc(sizeof(__bf16) * n_col * n_row);
@@ -29,3 +30,4 @@ __bf16 *amx_relayout(__bf16 *b_mat, int n_col, int n_row)
 
     return tmp;
 }
+#endif

@@ -5,17 +5,23 @@ NUM_THREADS?=$(shell nproc)
 
 TARGET?=skylake
 CXXFLAGS?=-march=$(TARGET) -O3 -flto -g -fsave-optimization-record -DNUM_THREADS=$(NUM_THREADS) -DTARGET=$(TARGET)
+USE_MKL?=no
 CC=clang++
 
-all: bench
+all: build/bench
 
 build/libgemm.a: gemm.cxx gemm.h simd_common.h
 	@mkdir -p build
 	$(CC) -o build/gemm.o -c gemm.cxx $(CXXFLAGS)
 	ar rcs build/libgemm.a build/gemm.o
 
-bench: build/libgemm.a bench.cxx bench.h
-	$(CC) -o build/bench bench.cxx -Lbuild -lgemm -lopenblas $(CXXFLAGS)
+build/bench: build/libgemm.a bench.cxx bench.h
+ifeq ($(USE_MKL),yes)
+	@#$(CC) -o build/bench bench.cxx -fopenmp -Lbuild -lgemm -m64  -I"${MKLROOT}/include" -L${MKLROOT}/lib -lmkl -Wl,--no-as-needed -lpthread -lm -ldl $(CXXFLAGS)
+	$(CC) -o build/bench bench.cxx -fopenmp -Lbuild -lgemm -m64  -I"${MKLROOT}/include"  -L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -DUSE_MKL $(CXXFLAGS)
+else
+	$(CC) -o build/bench bench.cxx -Lbuild -lgemm -I../OpenBLAS/install/include -L../OpenBLAS/install/lib -lopenblas $(CXXFLAGS)
+endif
 
 .PHONY: clean perf_report
 perf_report: bench
