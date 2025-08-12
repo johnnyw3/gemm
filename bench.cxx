@@ -5,6 +5,7 @@
 #include "simd_common.h"
 #include "gemm.h"
 #include "bench.h"
+//#include "mkl.h"
 
 int main(int argv, char **argc)
 {
@@ -56,11 +57,11 @@ int main(int argv, char **argc)
     {
         auto const start = std::chrono::high_resolution_clock::now();
 #ifdef USE_AMX
-        __bf16 *mat2_relayed = amx_relayout(mat2, n, n);
+        //__bf16 *mat2_relayed = amx_relayout(mat2, n, n);
 #endif
-        simd_gemm(mat1, mat2_relayed, dst, n);
+        simd_gemm(mat1, mat2, dst, n);
 #ifdef USE_AMX
-        free(mat2_relayed);
+        //free(mat2_relayed);
 #endif
 
         auto const end = std::chrono::high_resolution_clock::now();
@@ -182,6 +183,8 @@ void cblas_gemm(__bf16 *mat1, __bf16 *mat2, float *dst, int n)
 
     cblas_sbgemm( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
                   (bfloat16 *)mat1, n, (bfloat16 *)mat2, n, 1.0, dst, n );
+    //cblas_gemm_bf16bf16f32_compute( CblasRowMajor, CblasNoTrans, CblasNoTrans, n, n, n, 1.0,
+    //              (MKL_BF16*)mat1, n, (MKL_BF16*)mat2, n, 1.0, dst, n );
 
 }
 

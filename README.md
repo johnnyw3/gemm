@@ -1,8 +1,9 @@
 # GEMM 
 
 High performance GEMM kernels written in C++ using AVX and AMX
-intrinsics. Currently achieves ~80% performance of OpenBLAS (at least on my
-systems). 
+intrinsics. Currently achieves 75-105% performance of OpenBLAS (at least on
+systems I have tested with). Peak performance is than OpenBLAS on Granite Rapids! (* in
+single-threaded applications, there are bugs in my multithreaded code currently)
 
 Some optimization techniques were inspired by Salykov's article on the topic [2],
 but the algorithm used here is different than the one described in the article.
@@ -10,20 +11,21 @@ On my systems, I can achieve comparable performance to Salykov's code.
 
 # Benchmarks
 
-Metrics are in GFLOPs; speedups are compared to OpenBLAS. Types are `fp32` for
+Metrics are in GFLOPs; speedups are compared to OpenBLAS (in most cases, we also
+compared to Intel's MKL and used whichever library was faster as the baseline). Types are `fp32` for
 AVX-based kernels and `bf16` input/`fp32` result for AMX.
 
 **Single-threaded, n=4096** average of 10 runs
 
-| Kernel | CPU | This algorithm | OpenBLAS | Speedup |
+| Kernel | CPU | This algorithm | OpenBLAS/MKL | Speedup |
 |:-------|:----|---------------:|---------:|:------------------|
 AVX2 | **Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
 AVX-512 | **Tiger Lake** i5-1135G7 | 106 | 122 | 0.87 |
-AMX | **Emerald Rapids** Xeon 6972P | 1090 | 1170 | 0.93 |
+AMX | **Granite Rapids** Xeon 6972P | 1279 | 1229 | 1.04 |
 
 **4 threads, n=4096** average of 10 runs
 
-| Kernel | CPU | This algorithm | OpenBLAS | Speedup |
+| Kernel | CPU | This algorithm | OpenBLAS/MKL | Speedup |
 |:-------|:----|---------------:|---------:|:------------------|
 AVX2 | **Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
 AVX-512 | **Tiger Lake** i5-1135G7 | 380 | 465 | 0.82 |

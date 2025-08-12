@@ -760,21 +760,40 @@ void* simd_gemm_worker_amx(void *argv)
             {
                 __bf16 packed_b[sblock_ele_j*sblock_ele_k] __attribute__ ((__aligned__(64)));
 
-                mat2_ptr = mat2 + (k_outer/2)*mat2_cols + j_outer*2;
+                mat2_ptr = mat2 + k_outer*n + j_outer;
+                mat2_ptr2= mat2_ptr + n;
                 mat1_ptr = packed_b;
 
-                for (int idx = 0; idx < mat2_sblock_ele_k;)
+                for (int idx = 0; idx < sblock_ele_k;)
                 {
-                    for (int jdx = 0; jdx < mat2_sblock_ele_j; jdx += mat2_block_ele_j)
+                    for (int jdx = 0; jdx < sblock_ele_j; jdx += block_ele_j)
                     {
-                        memcpy(mat1_ptr, mat2_ptr + jdx, mat2_block_j);
+                        for (int jdx_inner = 0; jdx_inner < block_ele_j; jdx_inner += 32)
+                        {
+                        __bf16 *top_baseaddr = mat2_ptr + jdx + jdx_inner;
+                        __bf16 *bot_baseaddr = mat2_ptr2+ jdx + jdx_inner;
+                        __m512i topl = _mm512_maskz_expandloadu_epi16(0x55555555, top_baseaddr);
+                        __m512i topr = _mm512_maskz_expandloadu_epi16(0x55555555, top_baseaddr + 16);
+                        __m512i botl = _mm512_maskz_expandloadu_epi16(0xAAAAAAAA, bot_baseaddr);
+                        __m512i botr = _mm512_maskz_expandloadu_epi16(0xAAAAAAAA, bot_baseaddr + 16);
+
+                        __m512h resl = _mm512_mask_blend_ph(0xAAAAAAAA, (__m512h)topl, (__m512h)botl);
+                        __m512h resr = _mm512_mask_blend_ph(0xAAAAAAAA, (__m512h)topr, (__m512h)botr);
+
+                        __bf16 *out_baseaddr = mat1_ptr + jdx_inner*2;
+                        _mm512_storeu_ph(out_baseaddr, resl);
+                        _mm512_storeu_ph(out_baseaddr + 32, resr);
+
+                        }
+                        //memcpy(mat1_ptr, mat2_ptr + jdx, mat2_block_j);
                         mat1_ptr += mat2_block_ele_j*mat2_block_ele_k;
                     }
-                    mat2_ptr += mat2_cols;
-                    ++idx;
+                    mat2_ptr  += 2*n;
+                    mat2_ptr2 += 2*n;
+                    idx += 2;
 
 #if BLOCK_K != SBLOCK_K
-                    if (! (idx%mat2_block_ele_k) )
+                    if (! (idx%block_ele_k) )
                         mat1_ptr -= mat2_block_ele_j*mat2_block_ele_k - mat2_block_ele_j;
                     else
 #endif
