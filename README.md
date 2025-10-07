@@ -72,6 +72,17 @@ $ make TARGET=skylake NUM_THREADS=4
 
 You'll need to `make clean` first before changing configurations.
 
+## Install
+
+There is an `install` target provided in the makefile:
+
+```bash
+$ make install PREFIX=/your/sysroot/dir
+```
+
+This will copy the required libraries and header file(s) for use in other
+applications.
+
 # References
 
 [1] U. Drepper, “What Every Programmer Should Know About Memory,” Nov. 2007, [Online]. Available: https://people.freebsd.org/~lstewart/articles/cpumemory.pdf
