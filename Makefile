@@ -28,6 +28,7 @@ endif
 install: build/libgemm.a
 	$(INSTALL) -CD build/libgemm.a $(PREFIX)/usr/lib/gemm/libgemm.a
 	$(INSTALL) -CD -m 644 gemm.h $(PREFIX)/usr/include/gemm/gemm.h
+	$(INSTALL) -CD -m 644 simd_common.h $(PREFIX)/usr/include/gemm/simd_common.h
 
 .PHONY: clean perf_report install
 perf_report: bench

@@ -11,7 +11,7 @@ On my systems, I can achieve comparable performance to Salykov's code.
 
 # Benchmarks
 
-Metrics are in GFLOPs; speedups are compared to OpenBLAS (in most cases, we also
+Metrics are in GFLOPs; speedups are compared to OpenBLAS (we also
 compared to Intel's MKL and used whichever library was faster as the baseline). Types are `fp32` for
 AVX-based kernels and `bf16` input/`fp32` result for AMX.
 
@@ -19,7 +19,7 @@ AVX-based kernels and `bf16` input/`fp32` result for AMX.
 
 | Kernel | CPU | This algorithm | OpenBLAS/MKL | Speedup |
 |:-------|:----|---------------:|---------:|:------------------|
-AVX2 | **Skylake (Kaby Lake)** i5-8350u | 76 | 100 | 0.76 |
+AVX2 | **Skylake (Kaby Lake)** i5-8350u | 78 | 103 | 0.76 |
 AVX-512 | **Tiger Lake** i5-1135G7 | 106 | 122 | 0.87 |
 AMX | **Granite Rapids** Xeon 6972P | 1279 | 1229 | 1.04 |
 
@@ -27,8 +27,9 @@ AMX | **Granite Rapids** Xeon 6972P | 1279 | 1229 | 1.04 |
 
 | Kernel | CPU | This algorithm | OpenBLAS/MKL | Speedup |
 |:-------|:----|---------------:|---------:|:------------------|
-AVX2 | **Skylake (Kaby Lake)** i5-8350u | 213 | 274 | 0.78 |
+AVX2 | **Skylake (Kaby Lake)** i5-8350u | 213 |  282 | 0.76 |
 AVX-512 | **Tiger Lake** i5-1135G7 | 380 | 465 | 0.82 |
+AMX | **Granite Rapids** Xeon 6972P | 4810 | 4675 | 1.03 |
 
 # Prerequisites
 
