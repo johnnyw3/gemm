@@ -2,8 +2,8 @@
 
 High performance GEMM kernels written in C++ using AVX and AMX
 intrinsics. Currently achieves 75-105% performance of OpenBLAS (at least on
-systems I have tested with). Peak performance is than OpenBLAS on Granite Rapids! (* in
-single-threaded applications, there are bugs in my multithreaded code currently)
+systems I have tested with). Peak performance beats OpenBLAS on Granite Rapids! (* in
+single/lightly--threaded applications; my multithreaded code does not scale well beyond 8 threads)
 
 Some optimization techniques were inspired by Salykov's article on the topic [2],
 but the algorithm used here is different than the one described in the article.
